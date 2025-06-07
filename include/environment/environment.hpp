@@ -114,12 +114,15 @@ inline std::map<std::string, std::string> allenv
 
   char* currentEnv = envBlock;
   while (*currentEnv != '\0') {
-    std::string envString(currentEnv);
-    size_t pos = envString.find('=');
-    if (pos != std::string::npos) {
-      std::string key = envString.substr(0, pos);
-      std::string value = envString.substr(pos + 1);
-      envs[key] = value;
+    std::string_view envString(currentEnv);
+    auto pos = envString.find('=');
+    if (pos == 0) {
+      pos = envString.find('=', 1);
+    }
+    if (pos != std::string_view::npos) {
+      std::string_view key = envString.substr(0, pos);
+      std::string_view value = envString.substr(pos + 1);
+      envs[std::string(key)] = std::string(value);
     }
     currentEnv +=
         envString.length() + 1;  // Move to the next environment variable
@@ -138,12 +141,15 @@ inline std::map<std::string, std::string> allenv
   }
 
   for (char** env = environ; *env != nullptr; ++env) {
-    std::string envString(*env);
-    size_t pos = envString.find('=');
+    std::string_view envString(*env);
+    auto pos = envString.find('=');
+    if (pos == 0) {
+      pos = envString.find('=', 1);
+    }
     if (pos != std::string::npos) {
-      std::string key = envString.substr(0, pos);
-      std::string value = envString.substr(pos + 1);
-      envs[key] = value;
+      std::string_view key = envString.substr(0, pos);
+      std::string_view value = envString.substr(pos + 1);
+      envs[std::string(key)] = std::string(value);
     }
   }
 #endif
@@ -199,12 +205,15 @@ inline std::map<std::wstring, std::wstring> allenv<std::wstring>() {
 
   wchar_t* currentEnv = envBlock;
   while (*currentEnv != L'\0') {
-    std::wstring envString(currentEnv);
-    size_t pos = envString.find(L'=');
+    std::wstring_view envString(currentEnv);
+    auto pos = envString.find(L'=');
+    if (pos == 0) {
+      pos = envString.find(L'=', 1);
+    }
     if (pos != std::string::npos) {
-      std::wstring key = envString.substr(0, pos);
-      std::wstring value = envString.substr(pos + 1);
-      envs[key] = value;
+      std::wstring_view key = envString.substr(0, pos);
+      std::wstring_view value = envString.substr(pos + 1);
+      envs[std::wstring(key)] = std::wstring(value);
     }
     currentEnv +=
         envString.length() + 1;  // Move to the next environment variable

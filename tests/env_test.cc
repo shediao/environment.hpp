@@ -75,5 +75,5 @@ TEST(EnvironmentTest, UnsetEnv1) {
 #else
   process::run("bash", "-c", "echo -n $" + key, $stdout > stdout_);
 #endif
-  ASSERT_TRUE(stdout_.empty()) << "stdout_.size()=" << stdout_.size();
+  ASSERT_TRUE(stdout_.empty()) << "stdout_='" << stdout_.data() << "'";
 }
