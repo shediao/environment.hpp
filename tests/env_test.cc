@@ -70,7 +70,8 @@ TEST(EnvironmentTest, UnsetEnv1) {
   environment::unsetenv(key);
   stdout_.clear();
 #if defined(_WIN32)
-  process::run("cmd.exe", "/c", "<nul set /p=%" + key + "%&exit /b 0",
+  process::run("cmd.exe", "/c",
+               "if defined " + key + " (<nul set /p=%" + key + "%)&exit /b 0",
                $stdout > stdout_);
 #else
   process::run("bash", "-c", "echo -n $" + key, $stdout > stdout_);
