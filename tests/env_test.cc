@@ -22,9 +22,9 @@ TEST(EnvironmentTest, AllEnv1) {
       (std::is_same_v<decltype(envs)::value_type::second_type, std::string>));
 #endif
   for (auto const& [key, value] : envs) {
-    auto env = environment::getenv(key);
-    ASSERT_TRUE(env.has_value());
-    ASSERT_EQ(value, env.value());
+    auto env_ = environment::getenv(key);
+    ASSERT_TRUE(env_.has_value());
+    ASSERT_EQ(value, env_.value());
   }
 }
 
@@ -43,8 +43,8 @@ TEST(EnvironmentTest, SetEnv1) {
   environment::setenv(key, value);
   std::vector<char> stdout_;
 #if defined(_WIN32)
-  run("cmd.exe", "/c", "<nul set /p=%" + env1.first + "%&exit /b 0",
-      $stdout > stdout_);
+  process::run("cmd.exe", "/c", "<nul set /p=%" + key + "%&exit /b 0",
+               $stdout > stdout_);
 #else
   process::run("bash", "-c", "echo -n $" + key, $stdout > stdout_);
 #endif
@@ -59,8 +59,8 @@ TEST(EnvironmentTest, UnsetEnv1) {
   environment::setenv(key, value);
   std::vector<char> stdout_;
 #if defined(_WIN32)
-  run("cmd.exe", "/c", "<nul set /p=%" + env1.first + "%&exit /b 0",
-      $stdout > stdout_);
+  process::run("cmd.exe", "/c", "<nul set /p=%" + key + "%&exit /b 0",
+               $stdout > stdout_);
 #else
   process::run("bash", "-c", "echo -n $" + key, $stdout > stdout_);
 #endif
@@ -69,8 +69,8 @@ TEST(EnvironmentTest, UnsetEnv1) {
   environment::unsetenv(key);
   stdout_.clear();
 #if defined(_WIN32)
-  run("cmd.exe", "/c", "<nul set /p=%" + env1.first + "%&exit /b 0",
-      $stdout > stdout_);
+  process::run("cmd.exe", "/c", "<nul set /p=%" + key + "%&exit /b 0",
+               $stdout > stdout_);
 #else
   process::run("bash", "-c", "echo -n $" + key, $stdout > stdout_);
 #endif
