@@ -23,7 +23,8 @@ TEST(EnvironmentTest, AllEnv1) {
 #endif
   for (auto const& [key, value] : envs) {
     auto env_ = environment::getenv(key);
-    ASSERT_TRUE(env_.has_value());
+    ASSERT_TRUE(env_.has_value())
+        << "environment: key=" << key << ", value='" << value << "'";
     ASSERT_EQ(value, env_.value());
   }
 }
@@ -74,5 +75,5 @@ TEST(EnvironmentTest, UnsetEnv1) {
 #else
   process::run("bash", "-c", "echo -n $" + key, $stdout > stdout_);
 #endif
-  ASSERT_TRUE(stdout_.empty());
+  ASSERT_TRUE(stdout_.empty()) << "stdout_.size()=" << stdout_.size();
 }

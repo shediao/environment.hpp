@@ -48,8 +48,8 @@ inline std::optional<std::string> getenv(std::string const& name) {
   if (env) {
     return std::string(env);
   }
-#endif
   return std::nullopt;
+#endif
 }
 
 inline bool setenv(std::string const& name, std::string const& value,
