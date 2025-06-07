@@ -1,32 +1,33 @@
 # environment.hpp
 
 [![cmake-multi-platform](https://github.com/shediao/environment.hpp/actions/workflows/cmake-multi-platform.yml/badge.svg)](https://github.com/shediao/environment.hpp/actions/workflows/cmake-multi-platform.yml)
+[![cmake-multi-platform](https://github.com/shediao/environment.hpp/actions/workflows/msys2.yml/badge.svg)](https://github.com/shediao/environment.hpp/actions/workflows/msys2.yml)
 
-`environment.hpp` 是一个轻量级的、仅包含头文件的 C++ 库，用于方便、跨平台地操作环境变量。
+`environment.hpp` is a lightweight, header-only C++ library for convenient, cross-platform manipulation of environment variables.
 
-## 特性
+## Features
 
-- **仅头文件**: 只需将 `include/environment/environment.hpp` 包含到您的项目中即可使用。
-- **跨平台**: 在 Windows、macOS 和 Linux 上均可使用。
-- **类型安全**: 使用 `std::optional` 来处理可能不存在的环境变量，避免了空指针的风险。
-- **易于使用**: 提供简洁的函数来获取、设置、删除和遍历环境变量。
-- **宽字符支持**: 在 Windows 上，同时支持 `char` (`std::string`) 和 `wchar_t` (`std::wstring`)。
+- **Header-only**: Just include `include/environment/environment.hpp` in your project to use it.
+- **Cross-platform**: Works on Windows, macOS, and Linux.
+- **Type-safe**: Uses `std::optional` to handle potentially non-existent environment variables, avoiding the risk of null pointers.
+- **Easy to use**: Provides simple functions to get, set, unset, and iterate over environment variables.
+- **Wide-character support**: Supports both `char` (`std::string`) and `wchar_t` (`std::wstring`) on Windows.
 
-## 如何使用
+## How to Use
 
-### 1. 包含头文件
+### 1. Include the Header
 
-将 `include` 目录下的 `environment` 文件夹复制到您的项目中，然后包含头文件：
+Copy the `environment` folder from the `include` directory into your project, then include the header file:
 
 ```cpp
 #include "environment/environment.hpp"
 ```
 
-### 2. 代码示例
+### 2. Code Examples
 
-#### 获取环境变量
+#### Get an Environment Variable
 
-使用 `environment::getenv` 来获取一个环境变量。如果变量存在，它会返回一个包含值的 `std::optional`，否则返回 `std::nullopt`。
+Use `environment::getenv` to retrieve an environment variable. It returns an `std::optional` containing the value if the variable exists, otherwise it returns `std::nullopt`.
 
 ```cpp
 #include "environment/environment.hpp"
@@ -42,30 +43,30 @@ int main() {
 }
 ```
 
-#### 设置环境变量
+#### Set an Environment Variable
 
-使用 `environment::setenv` 来设置一个环境变量。
+Use `environment::setenv` to set an environment variable.
 
 ```cpp
-// 设置一个新变量
+// Set a new variable
 environment::setenv("MY_VAR", "my_value");
 
-// 默认情况下，setenv 会覆盖已存在的值。
-// 若不希望覆盖，可以将第三个参数设置为 false。
-environment::setenv("MY_VAR", "another_value", false); // 不会修改 "MY_VAR"
+// By default, setenv will overwrite an existing value.
+// To prevent overwriting, set the third argument to false.
+environment::setenv("MY_VAR", "another_value", false); // This will not modify "MY_VAR"
 ```
 
-#### 删除环境变量
+#### Unset an Environment Variable
 
-使用 `environment::unsetenv` 来删除一个环境变量。
+Use `environment::unsetenv` to remove an environment variable.
 
 ```cpp
 environment::unsetenv("MY_VAR");
 ```
 
-#### 获取所有环境变量
+#### Get All Environment Variables
 
-使用 `environment::allenv` 来获取一个包含所有环境变量的 `std::map`。
+Use `environment::allenv` to get a `std::map` containing all environment variables.
 
 ```cpp
 #include "environment/environment.hpp"
@@ -82,9 +83,9 @@ int main() {
 }
 ```
 
-#### Windows 上的宽字符支持
+#### Wide-Character Support on Windows
 
-在 Windows 上，您可以操作宽字符环境变量。
+On Windows, you can work with wide-character environment variables.
 
 ```cpp
 #if defined(_WIN32)
@@ -92,15 +93,15 @@ int main() {
 #include <iostream>
 
 int main() {
-    // 设置宽字符环境变量
+    // Set a wide-character environment variable
     environment::setenv(L"MY_WVAR", L"my_wide_value");
 
-    // 获取宽字符环境变量
+    // Get a wide-character environment variable
     if (auto wvar = environment::getenv(L"MY_WVAR")) {
         std::wcout << L"MY_WVAR is: " << *wvar << std::endl;
     }
 
-    // 获取所有宽字符环境变量
+    // Get all wide-character environment variables
     auto all_wvars = environment::allenv<std::wstring>();
     for (const auto& [key, value] : all_wvars) {
         std::wcout << key << L"=" << value << std::endl;
@@ -111,41 +112,41 @@ int main() {
 #endif
 ```
 
-## API 参考
+## API Reference
 
 ### `std::optional<std::string> getenv(const std::string& name)`
-- 获取指定名称的环境变量。
-- **参数**:
-  - `name`: 环境变量的名称。
-- **返回值**:
-  - 如果找到，返回包含值的 `std::optional<std::string>`。
-  - 如果未找到，返回 `std::nullopt`。
-- **Windows `wchar_t` 重载**: `std::optional<std::wstring> getenv(const std::wstring& name)`
+- Gets the environment variable with the specified name.
+- **Parameters**:
+  - `name`: The name of the environment variable.
+- **Return Value**:
+  - An `std::optional<std::string>` containing the value if found.
+  - `std::nullopt` if not found.
+- **Windows `wchar_t` Overload**: `std::optional<std::wstring> getenv(const std::wstring& name)`
 
 ### `bool setenv(const std::string& name, const std::string& value, bool overwrite = true)`
-- 设置环境变量。
-- **参数**:
-  - `name`: 环境变量的名称。
-  - `value`: 要设置的值。
-  - `overwrite`: 如果为 `true`（默认），则覆盖已存在的值。如果为 `false`，且变量已存在，则不进行任何操作。
-- **返回值**:
-  - 如果操作成功，返回 `true`。
-  - 如果操作失败，返回 `false`。
-- **Windows `wchar_t` 重载**: `bool setenv(const std::wstring& name, const std::wstring& value, bool overwrite = true)`
+- Sets an environment variable.
+- **Parameters**:
+  - `name`: The name of the environment variable.
+  - `value`: The value to set.
+  - `overwrite`: If `true` (default), it overwrites an existing value. If `false` and the variable already exists, no action is taken.
+- **Return Value**:
+  - `true` if the operation was successful.
+  - `false` if the operation failed.
+- **Windows `wchar_t` Overload**: `bool setenv(const std::wstring& name, const std::wstring& value, bool overwrite = true)`
 
 ### `bool unsetenv(const std::string& name)`
-- 删除一个环境变量。
-- **参数**:
-  - `name`: 要删除的环境变量的名称。
-- **返回值**:
-  - 如果操作成功，返回 `true`。
-  - 如果操作失败，返回 `false`。
-- **Windows `wchar_t` 重载**: `bool unsetenv(const std::wstring& name)`
+- Removes an environment variable.
+- **Parameters**:
+  - `name`: The name of the environment variable to remove.
+- **Return Value**:
+  - `true` if the operation was successful.
+  - `false` if the operation failed.
+- **Windows `wchar_t` Overload**: `bool unsetenv(const std::wstring& name)`
 
 ### `std::map<std::string, std::string> allenv()`
-- 获取当前环境中所有环境变量的副本。
-- **返回值**:
-  - 一个 `std::map`，其中键是环境变量名称，值是对应的环境变量值。
-- **Windows `wchar_t` 重载**: `std::map<std::wstring, std::wstring> allenv<std::wstring>()`
+- Gets a copy of all environment variables in the current environment.
+- **Return Value**:
+  - A `std::map` where the keys are environment variable names and the values are their corresponding values.
+- **Windows `wchar_t` Overload**: `std::map<std::wstring, std::wstring> allenv<std::wstring>()`
 
-**注意**: 在 Windows 平台上，环境变量的键是大小写不敏感的。然而，`allenv` 函数返回的是一个 `std::map`，它是一个大小写敏感的容器。这意味着，如果您的环境中存在仅大小写不同的变量名（例如 `Path` 和 `PATH`），在返回的 map 中将只会保留其中一个。因此，在 Windows 上使用 `allenv` 的结果时，建议用户在查找键时自行处理大小写问题（例如，统一转换为大写或小写再进行比较）。
+**Note**: On the Windows platform, environment variable keys are case-insensitive. However, the `allenv` function returns a `std::map`, which is a case-sensitive container. This means if your environment contains variable names that differ only in case (e.g., `Path` and `PATH`), only one of them will be present in the returned map. Therefore, when using the result of `allenv` on Windows, it is recommended that users handle case-insensitivity themselves when looking up keys (e.g., by converting keys to a consistent case before comparison).
