@@ -5,6 +5,8 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -84,7 +86,7 @@ inline bool unsetenv(std::string const& name) {
 #if defined(_WIN32)
   return SetEnvironmentVariableA(name.c_str(), nullptr);
 #else
-  return ::unsetenv(name.c_str());
+  return ::unsetenv(name.c_str()) == 0;
 #endif
 }
 
@@ -112,10 +114,13 @@ inline std::map<std::string, std::string> allenv
     return envs;
   }
 
-  char* currentEnv = envBlock;
+  const char* currentEnv = envBlock;
   while (*currentEnv != '\0') {
     std::string_view envString(currentEnv);
     auto pos = envString.find('=');
+    // Weird variables in Windows that start with '='.
+    // The key is the name of a drive, like "=C:", and the value is the
+    // current working directory on that drive.
     if (pos == 0) {
       pos = envString.find('=', 1);
     }
@@ -175,6 +180,9 @@ inline std::optional<std::wstring> getenv(std::wstring const& name) {
 
 inline bool setenv(std::wstring const& name, std::wstring const& value,
                    bool overwrite = true) {
+  if (name.empty()) {
+    return false;
+  }
   if (!overwrite) {
     std::vector<wchar_t> buf(128);
     GetEnvironmentVariableW(name.c_str(), buf.data(),
@@ -210,7 +218,7 @@ inline std::map<std::wstring, std::wstring> allenv<std::wstring>() {
     if (pos == 0) {
       pos = envString.find(L'=', 1);
     }
-    if (pos != std::string::npos) {
+    if (pos != std::wstring_view::npos) {
       std::wstring_view key = envString.substr(0, pos);
       std::wstring_view value = envString.substr(pos + 1);
       envs[std::wstring(key)] = std::wstring(value);
