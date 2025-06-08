@@ -32,19 +32,15 @@ namespace environment {
 
 inline std::optional<std::string> getenv(std::string const& name) {
 #if defined(_WIN32)
-  std::vector<char> buf(128);
-  auto const size = GetEnvironmentVariableA(name.c_str(), buf.data(),
-                                            static_cast<DWORD>(buf.size()));
-  if (GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-    return std::nullopt;
+  auto const size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
+  if (size == 0) {
+    return GetLastError() == ERROR_ENVVAR_NOT_FOUND
+               ? std::nullopt
+               : std::optional<std::string>{""};
   }
-  if (size > buf.size()) {
-    buf.resize(static_cast<size_t>(size));
-    buf[0] = '\0';
-    GetEnvironmentVariableA(name.c_str(), buf.data(),
-                            static_cast<DWORD>(buf.size()));
-  }
-  return std::string{buf.data()};
+  std::vector<char> value(size);
+  GetEnvironmentVariableA(name.c_str(), value.data(), size);
+  return std::string{value.data()};
 #else
   auto* env = ::getenv(name.c_str());
   if (env) {
@@ -61,16 +57,13 @@ inline bool setenv(std::string const& name, std::string const& value,
   }
 #if defined(_WIN32)
   if (!overwrite) {
-    std::vector<char> buf(128);
-    GetEnvironmentVariableA(name.c_str(), buf.data(),
-                            static_cast<DWORD>(buf.size()));
-    if (GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+    auto const size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
+    if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
       return SetEnvironmentVariableA(name.c_str(), value.c_str());
     }
     return true;
-  } else {
-    return SetEnvironmentVariableA(name.c_str(), value.c_str());
   }
+  return SetEnvironmentVariableA(name.c_str(), value.c_str());
 #else
   if (::setenv(name.c_str(), value.c_str(), overwrite ? 1 : 0) != 0) {
     return false;
@@ -148,9 +141,6 @@ inline std::map<std::string, std::string> allenv
   for (char** env = environ; *env != nullptr; ++env) {
     std::string_view envString(*env);
     auto pos = envString.find('=');
-    if (pos == 0) {
-      pos = envString.find('=', 1);
-    }
     if (pos != std::string::npos) {
       std::string_view key = envString.substr(0, pos);
       std::string_view value = envString.substr(pos + 1);
@@ -163,19 +153,15 @@ inline std::map<std::string, std::string> allenv
 
 #if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
 inline std::optional<std::wstring> getenv(std::wstring const& name) {
-  std::vector<wchar_t> buf(128);
-  auto const size = GetEnvironmentVariableW(name.c_str(), buf.data(),
-                                            static_cast<DWORD>(buf.size()));
-  if (GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-    return std::nullopt;
+  auto const size = GetEnvironmentVariableW(name.c_str(), nullptr, 0);
+  if (size == 0) {
+    return GetLastError() == ERROR_ENVVAR_NOT_FOUND
+               ? std::nullopt
+               : std::optional<std::wstring>{L""};
   }
-  if (size > buf.size()) {
-    buf.resize(static_cast<size_t>(size));
-    buf[0] = L'\0';
-    GetEnvironmentVariableW(name.c_str(), buf.data(),
-                            static_cast<DWORD>(buf.size()));
-  }
-  return std::wstring{buf.data()};
+  std::vector<wchar_t> value(size);
+  GetEnvironmentVariableW(name.c_str(), value.data(), size);
+  return std::wstring{value.data()};
 }
 
 inline bool setenv(std::wstring const& name, std::wstring const& value,
@@ -184,16 +170,13 @@ inline bool setenv(std::wstring const& name, std::wstring const& value,
     return false;
   }
   if (!overwrite) {
-    std::vector<wchar_t> buf(128);
-    GetEnvironmentVariableW(name.c_str(), buf.data(),
-                            static_cast<DWORD>(buf.size()));
-    if (GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+    auto const size = GetEnvironmentVariableW(name.c_str(), nullptr, 0);
+    if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
       return SetEnvironmentVariableW(name.c_str(), value.c_str());
     }
     return true;
-  } else {
-    return SetEnvironmentVariableW(name.c_str(), value.c_str());
   }
+  return SetEnvironmentVariableW(name.c_str(), value.c_str());
 }
 
 inline bool unsetenv(std::wstring const& name) {
