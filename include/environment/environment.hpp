@@ -1,7 +1,10 @@
 #ifndef __ENVIRONMENT_ENVIRONMENT_HPP__
 #define __ENVIRONMENT_ENVIRONMENT_HPP__
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
+#include <cwctype>
 #include <map>
 #include <optional>
 #include <string>
@@ -118,9 +121,11 @@ inline std::map<std::string, std::string> environments
       pos = envString.find('=', 1);
     }
     if (pos != std::string_view::npos) {
-      std::string_view key = envString.substr(0, pos);
-      std::string_view value = envString.substr(pos + 1);
-      envs[std::string(key)] = std::string(value);
+      auto key = std::string(envString.substr(0, pos));
+      auto value = std::string(envString.substr(pos + 1));
+      std::transform(key.begin(), key.end(), key.begin(),
+                     [](unsigned char c) { return std::toupper(c); });
+      envs[std::move(key)] = std::move(value);
     }
     currentEnv +=
         envString.length() + 1;  // Move to the next environment variable
@@ -202,9 +207,11 @@ inline std::map<std::wstring, std::wstring> environments<std::wstring>() {
       pos = envString.find(L'=', 1);
     }
     if (pos != std::wstring_view::npos) {
-      std::wstring_view key = envString.substr(0, pos);
-      std::wstring_view value = envString.substr(pos + 1);
-      envs[std::wstring(key)] = std::wstring(value);
+      auto key = std::wstring(envString.substr(0, pos));
+      auto value = std::wstring(envString.substr(pos + 1));
+      std::transform(key.begin(), key.end(), key.begin(),
+                     [](wchar_t c) { return std::towupper(c); });
+      envs[std::move(key)] = std::move(value);
     }
     currentEnv +=
         envString.length() + 1;  // Move to the next environment variable
