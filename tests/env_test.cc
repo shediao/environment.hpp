@@ -12,7 +12,7 @@ using namespace process::detail::named_args;
   std::pair<std::string, std::string> { x "KEY_" #y, x "VALUE_" #y }
 
 TEST(EnvironmentTest, AllEnv1) {
-  auto envs = environment::allenv();
+  auto envs = environment::environments();
   ASSERT_GT(envs.size(), 0);
 #if defined(_WIN32) && defined(UNICODE)
   ASSERT_TRUE(

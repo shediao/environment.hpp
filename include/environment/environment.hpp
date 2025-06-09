@@ -89,13 +89,13 @@ template <typename StringType = std::wstring>
 #else
 template <typename StringType = std::string>
 #endif
-inline std::map<StringType, StringType> allenv();
+inline std::map<StringType, StringType> environments();
 #endif
 
 #if defined(_WIN32)
 template <>
 #endif
-inline std::map<std::string, std::string> allenv
+inline std::map<std::string, std::string> environments
 #if defined(_WIN32)
     <std::string>
 #endif
@@ -187,7 +187,7 @@ inline bool unsetenv(std::wstring const& name) {
 }
 
 template <>
-inline std::map<std::wstring, std::wstring> allenv<std::wstring>() {
+inline std::map<std::wstring, std::wstring> environments<std::wstring>() {
   std::map<std::wstring, std::wstring> envs;
   wchar_t* envBlock = GetEnvironmentStringsW();
   if (envBlock == nullptr) {
