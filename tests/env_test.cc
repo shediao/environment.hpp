@@ -33,6 +33,9 @@ TEST(EnvironmentTest, GenEnv1) {
   ASSERT_TRUE(environment::getenv("PATH").has_value());
 #if defined(_WIN32)
   ASSERT_TRUE(environment::getenv("USERPROFILE").has_value());
+#if defined(UNICODE) || defined(_UNICODE)
+  ASSERT_TRUE(environment::getenv(L"USERPROFILE").has_value());
+#endif
 #else
   ASSERT_TRUE(environment::getenv("HOME").has_value());
   ASSERT_TRUE(environment::getenv("USER").has_value());

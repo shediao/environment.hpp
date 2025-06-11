@@ -33,8 +33,59 @@ extern char** environ;
 
 namespace environment {
 
+namespace {
+#if (defined(_WIN32) || defined(_WIN64)) && \
+    (defined(UNICODE) || defined(_UNICODE))
+// Helper function to convert a UTF-8 std::string to a UTF-16 std::wstring
+inline std::wstring to_wstring(const std::string& str) {
+  if (str.empty()) {
+    return {};
+  }
+  int size_needed =
+      MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+  if (size_needed <= 0) {
+    // Consider throwing an exception for conversion errors
+    return {};
+  }
+  std::wstring wstr(size_needed, 0);
+  MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstr[0],
+                      size_needed);
+  return wstr;
+}
+
+// Helper function to convert a UTF-16 std::wstring to a UTF-8 std::string
+inline std::string to_string(const std::wstring& wstr) {
+  if (wstr.empty()) {
+    return {};
+  }
+  int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(),
+                                        NULL, 0, NULL, NULL);
+  if (size_needed <= 0) {
+    // Consider throwing an exception for conversion errors
+    return {};
+  }
+  std::string str(size_needed, 0);
+  WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &str[0],
+                      size_needed, NULL, NULL);
+  return str;
+}
+#endif
+}  // namespace
+
 inline std::optional<std::string> getenv(std::string const& name) {
 #if defined(_WIN32)
+#if defined(UNICODE) || defined(_UNICODE)
+  auto namew = to_wstring(name);
+  auto const size = GetEnvironmentVariableW(namew.c_str(), nullptr, 0);
+  if (size == 0) {
+    return GetLastError() == ERROR_ENVVAR_NOT_FOUND
+               ? std::nullopt
+               : std::optional<std::string>{""};
+  }
+  std::vector<wchar_t> value(size);
+  GetEnvironmentVariableW(namew.c_str(), value.data(), size);
+  return to_string(value.data());
+#else
   auto const size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
   if (size == 0) {
     return GetLastError() == ERROR_ENVVAR_NOT_FOUND
@@ -44,6 +95,7 @@ inline std::optional<std::string> getenv(std::string const& name) {
   std::vector<char> value(size);
   GetEnvironmentVariableA(name.c_str(), value.data(), size);
   return std::string{value.data()};
+#endif
 #else
   auto* env = ::getenv(name.c_str());
   if (env) {
@@ -59,6 +111,18 @@ inline bool setenv(std::string const& name, std::string const& value,
     return false;
   }
 #if defined(_WIN32)
+#if defined(UNICODE) || defined(_UNICODE)
+  auto namew = to_wstring(name);
+  auto valuew = to_wstring(value);
+  if (!overwrite) {
+    auto const size = GetEnvironmentVariableW(namew.c_str(), nullptr, 0);
+    if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+      return SetEnvironmentVariableW(namew.c_str(), valuew.c_str());
+    }
+    return true;
+  }
+  return SetEnvironmentVariableW(namew.c_str(), valuew.c_str());
+#else
   if (!overwrite) {
     auto const size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
     if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
@@ -67,6 +131,7 @@ inline bool setenv(std::string const& name, std::string const& value,
     return true;
   }
   return SetEnvironmentVariableA(name.c_str(), value.c_str());
+#endif
 #else
   if (::setenv(name.c_str(), value.c_str(), overwrite ? 1 : 0) != 0) {
     return false;
@@ -80,7 +145,12 @@ inline bool unsetenv(std::string const& name) {
     return false;
   }
 #if defined(_WIN32)
+#if defined(UNICODE) || defined(_UNICODE)
+  auto namew = to_wstring(name);
+  return SetEnvironmentVariableW(namew.c_str(), nullptr);
+#else
   return SetEnvironmentVariableA(name.c_str(), nullptr);
+#endif
 #else
   return ::unsetenv(name.c_str()) == 0;
 #endif
@@ -89,37 +159,53 @@ inline bool unsetenv(std::string const& name) {
 #if defined(_WIN32)
 #if defined(UNICODE) || defined(_UNICODE)
 template <typename StringType = std::wstring>
-#else
-template <typename StringType = std::string>
-#endif
 inline std::map<StringType, StringType> environments();
+#else
+inline std::map<std::string, std::string> environments();
+#endif
 #endif
 
 #if defined(_WIN32)
+#if defined(UNICODE) || defined(_UNICODE)
 template <>
+inline std::map<std::string, std::string> environments<std::string>() {
+#else
+inline std::map<std::string, std::string> environments() {
 #endif
-inline std::map<std::string, std::string> environments
-#if defined(_WIN32)
-    <std::string>
-#endif
-    () {
   std::map<std::string, std::string> envs;
-#if defined(_WIN32)
+
+#if defined(UNICODE) || defined(_UNICODE)
+  auto* envBlock = GetEnvironmentStringsW();
+#else
   auto* envBlock = GetEnvironmentStrings();
+#endif
   if (envBlock == nullptr) {
     return envs;
   }
 
-  const char* currentEnv = envBlock;
-  while (*currentEnv != '\0') {
+  const auto* currentEnv = envBlock;
+  while (*currentEnv != TEXT('\0')) {
+#if defined(UNICODE) || defined(_UNICODE)
+    std::wstring_view envString(currentEnv);
+#else
     std::string_view envString(currentEnv);
-    auto pos = envString.find('=');
+#endif
+    auto pos = envString.find(TEXT('='));
     // Weird variables in Windows that start with '='.
     // The key is the name of a drive, like "=C:", and the value is the
     // current working directory on that drive.
     if (pos == 0) {
-      pos = envString.find('=', 1);
+      pos = envString.find(TEXT('='), 1);
     }
+#if defined(UNICODE) || defined(_UNICODE)
+    if (pos != std::wstring_view::npos) {
+      auto key = std::wstring(envString.substr(0, pos));
+      auto value = std::wstring(envString.substr(pos + 1));
+      std::transform(key.begin(), key.end(), key.begin(),
+                     [](wchar_t c) { return std::towupper(c); });
+      envs[to_string(key)] = to_string(value);
+    }
+#else
     if (pos != std::string_view::npos) {
       auto key = std::string(envString.substr(0, pos));
       auto value = std::string(envString.substr(pos + 1));
@@ -127,18 +213,22 @@ inline std::map<std::string, std::string> environments
                      [](unsigned char c) { return std::toupper(c); });
       envs[std::move(key)] = std::move(value);
     }
+#endif
     currentEnv +=
         envString.length() + 1;  // Move to the next environment variable
   }
 
 #if defined(UNICODE)
-  FreeEnvironmentStringsA(envBlock);
-#else
   FreeEnvironmentStrings(envBlock);
-#endif
-
 #else
+  FreeEnvironmentStringsA(envBlock);
+#endif
+  return envs;
+}
 
+#else   // _WIN32
+inline std::map<std::string, std::string> environments() {
+  std::map<std::string, std::string> envs;
   if (environ == nullptr) {
     return envs;
   }
@@ -152,9 +242,9 @@ inline std::map<std::string, std::string> environments
       envs[std::string(key)] = std::string(value);
     }
   }
-#endif
   return envs;
 }
+#endif  // !_WIN32
 
 #if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
 inline std::optional<std::wstring> getenv(std::wstring const& name) {
