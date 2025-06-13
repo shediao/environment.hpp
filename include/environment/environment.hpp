@@ -33,7 +33,7 @@ extern char** environ;
 
 namespace environment {
 
-namespace {
+namespace detail {
 #if (defined(_WIN32) || defined(_WIN64)) && \
     (defined(UNICODE) || defined(_UNICODE))
 // Helper function to convert a UTF-8 std::string to a UTF-16 std::wstring
@@ -70,12 +70,12 @@ inline std::string to_string(const std::wstring& wstr) {
   return str;
 }
 #endif
-}  // namespace
+}  // namespace detail
 
 inline std::optional<std::string> getenv(std::string const& name) {
 #if defined(_WIN32)
 #if defined(UNICODE) || defined(_UNICODE)
-  auto namew = to_wstring(name);
+  auto namew = detail::to_wstring(name);
   auto const size = GetEnvironmentVariableW(namew.c_str(), nullptr, 0);
   if (size == 0) {
     return GetLastError() == ERROR_ENVVAR_NOT_FOUND
@@ -84,7 +84,7 @@ inline std::optional<std::string> getenv(std::string const& name) {
   }
   std::vector<wchar_t> value(size);
   GetEnvironmentVariableW(namew.c_str(), value.data(), size);
-  return to_string(value.data());
+  return detail::to_string(value.data());
 #else
   auto const size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
   if (size == 0) {
@@ -112,8 +112,8 @@ inline bool setenv(std::string const& name, std::string const& value,
   }
 #if defined(_WIN32)
 #if defined(UNICODE) || defined(_UNICODE)
-  auto namew = to_wstring(name);
-  auto valuew = to_wstring(value);
+  auto namew = detail::to_wstring(name);
+  auto valuew = detail::to_wstring(value);
   if (!overwrite) {
     auto const size = GetEnvironmentVariableW(namew.c_str(), nullptr, 0);
     if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
@@ -146,7 +146,7 @@ inline bool unsetenv(std::string const& name) {
   }
 #if defined(_WIN32)
 #if defined(UNICODE) || defined(_UNICODE)
-  auto namew = to_wstring(name);
+  auto namew = detail::to_wstring(name);
   return SetEnvironmentVariableW(namew.c_str(), nullptr);
 #else
   return SetEnvironmentVariableA(name.c_str(), nullptr);
@@ -203,7 +203,7 @@ inline std::map<std::string, std::string> environments() {
       auto value = std::wstring(envString.substr(pos + 1));
       std::transform(key.begin(), key.end(), key.begin(),
                      [](wchar_t c) { return std::towupper(c); });
-      envs[to_string(key)] = to_string(value);
+      envs[detail::to_string(key)] = detail::to_string(value);
     }
 #else
     if (pos != std::string_view::npos) {
