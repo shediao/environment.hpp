@@ -31,7 +31,7 @@ extern char** environ;
 #endif  // defined(GetEnvironmentStrings)
 #endif  // _WIN32
 
-namespace environment {
+namespace env {
 
 namespace detail {
 #if (defined(_WIN32) || defined(_WIN64)) && \
@@ -159,18 +159,18 @@ inline bool unsetenv(std::string const& name) {
 #if defined(_WIN32)
 #if defined(UNICODE) || defined(_UNICODE)
 template <typename StringType = std::wstring>
-inline std::map<StringType, StringType> environments();
+inline std::map<StringType, StringType> environs();
 #else
-inline std::map<std::string, std::string> environments();
+inline std::map<std::string, std::string> environs();
 #endif
 #endif
 
 #if defined(_WIN32)
 #if defined(UNICODE) || defined(_UNICODE)
 template <>
-inline std::map<std::string, std::string> environments<std::string>() {
+inline std::map<std::string, std::string> environs<std::string>() {
 #else
-inline std::map<std::string, std::string> environments() {
+inline std::map<std::string, std::string> environs() {
 #endif
   std::map<std::string, std::string> envs;
 
@@ -227,7 +227,7 @@ inline std::map<std::string, std::string> environments() {
 }
 
 #else   // _WIN32
-inline std::map<std::string, std::string> environments() {
+inline std::map<std::string, std::string> environs() {
   std::map<std::string, std::string> envs;
   if (environ == nullptr) {
     return envs;
@@ -282,7 +282,7 @@ inline bool unsetenv(std::wstring const& name) {
 }
 
 template <>
-inline std::map<std::wstring, std::wstring> environments<std::wstring>() {
+inline std::map<std::wstring, std::wstring> environs<std::wstring>() {
   std::map<std::wstring, std::wstring> envs;
   wchar_t* envBlock = GetEnvironmentStringsW();
   if (envBlock == nullptr) {
@@ -312,7 +312,7 @@ inline std::map<std::wstring, std::wstring> environments<std::wstring>() {
 }
 #endif  // _WIN32 && UNICODE
 
-}  // namespace environment
+}  // namespace env
 
 #if defined(ENVIRONMENT_HPP_GET_ENVIRONMENT_STRINGS_UNDEFINED)
 #if defined(_MSC_VER) || defined(__GNUC__)
