@@ -18,20 +18,6 @@
 extern char** environ;
 #endif
 
-#if defined(_WIN32)
-#if defined(GetEnvironmentStrings)
-// Unlike most of the WinAPI, GetEnvironmentStrings is a real function and
-// GetEnvironmentStringsA is a macro. In UNICODE builds, GetEnvironmentStrings
-// is also defined as a macro that redirects to GetEnvironmentStringsW, and the
-// narrow character version become inaccessible. Facepalm.
-#if defined(_MSC_VER) || defined(__GNUC__)
-#pragma push_macro("GetEnvironmentStrings")
-#endif
-#undef GetEnvironmentStrings
-#define ENVIRONMENT_HPP_GET_ENVIRONMENT_STRINGS_UNDEFINED
-#endif  // defined(GetEnvironmentStrings)
-#endif  // _WIN32
-
 namespace env {
 
 namespace detail {
@@ -124,7 +110,8 @@ std::optional<std::basic_string<CharT>> getenv(
     std::basic_string<CharT> const& name) {
   size_t size = 0;
   if constexpr (std::is_same_v<char, CharT>) {
-    GetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr, 0);
+    auto wname = detail::to_wstring(name);
+    GetEnvironmentVariable(wname.c_str(), nullptr, 0);
   } else {
     GetEnvironmentVariable(name.c_str(), nullptr, 0);
   }
@@ -134,8 +121,8 @@ std::optional<std::basic_string<CharT>> getenv(
   std::vector<wchar_t> value(size);
 
   if constexpr (std::is_same_v<char, CharT>) {
-    GetEnvironmentVariable(detail::to_wstring(name).c_str(), value.data(),
-                           size);
+    auto wname = detail::to_wstring(name);
+    GetEnvironmentVariable(wname.c_str(), value.data(), size);
   } else {
     GetEnvironmentVariable(name.c_str(), value.data(), size);
   }
@@ -177,8 +164,8 @@ bool setenv(std::basic_string<CharT> const& name,
   if (!overwrite) {
     size_t size = 0;
     if constexpr (std::is_same_v<char, CharT>) {
-      size =
-          GetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr, 0);
+      auto wname = detail::to_wstring(name);
+      size = GetEnvironmentVariable(wname.c_str(), nullptr, 0);
     } else {
       size = GetEnvironmentVariable(name.c_str(), nullptr, 0);
     }
@@ -187,8 +174,9 @@ bool setenv(std::basic_string<CharT> const& name,
     }
   }
   if constexpr (std::is_same_v<char, CharT>) {
-    return SetEnvironmentVariable(detail::to_wstring(name).c_str(),
-                                  detail::to_wstring(value).c_str());
+    auto wname = detail::to_wstring(name);
+    auto wvalue = detail::to_wstring(value);
+    return SetEnvironmentVariable(wname.c_str(), wvalue.c_str());
   } else {
     return SetEnvironmentVariable(name.c_str(), value.c_str());
   }
@@ -225,7 +213,8 @@ bool unsetenv(std::basic_string<CharT> const& name) {
     return false;
   }
   if constexpr (std::is_same_v<char, CharT>) {
-    return SetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr);
+    auto wname = detail::to_wstring(name);
+    return SetEnvironmentVariable(wname.c_str(), nullptr);
   } else {
     return SetEnvironmentVariable(name.c_str(), nullptr);
   }
@@ -251,7 +240,7 @@ std::map<StringType, StringType> environs();
 template <>
 inline std::map<std::wstring, std::wstring> environs<std::wstring>() {
   std::map<std::wstring, std::wstring> envs;
-  wchar_t* envBlock = GetEnvironmentStringsW();
+  wchar_t* envBlock = GetEnvironmentStrings();
   if (envBlock == nullptr) {
     return envs;
   }
@@ -268,7 +257,7 @@ inline std::map<std::wstring, std::wstring> environs<std::wstring>() {
       auto value = std::wstring(envString.substr(pos + 1));
       std::transform(key.begin(), key.end(), key.begin(),
                      [](wchar_t c) { return std::towupper(c); });
-      envs[std::move(key)] = std::move(value);
+      envs[key] = value;
     }
     currentEnv +=
         envString.length() + 1;  // Move to the next environment variable
@@ -325,14 +314,5 @@ inline std::map<std::string, std::string> environs() {
 #endif  // _WIN32
 
 }  // namespace env
-
-#if defined(ENVIRONMENT_HPP_GET_ENVIRONMENT_STRINGS_UNDEFINED)
-#if defined(_MSC_VER) || defined(__GNUC__)
-#pragma pop_macro("GetEnvironmentStrings")
-#elif defined(UNICODE)
-#define GetEnvironmentStrings GetEnvironmentStringsW
-#endif
-#undef ENVIRONMENT_HPP_GET_ENVIRONMENT_STRINGS_UNDEFINED
-#endif  // defined(ENVIRONMENT_HPP_GET_ENVIRONMENT_STRINGS_UNDEFINED)
 
 #endif  // __ENVIRONMENT_ENVIRONMENT_HPP__

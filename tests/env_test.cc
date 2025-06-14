@@ -23,8 +23,7 @@ TEST(EnvironmentTest, AllEnv1) {
 #endif
   for (auto const& [key, value] : envs) {
     auto env_ = env::getenv(key);
-    ASSERT_TRUE(env_.has_value())
-        << "environment: key=" << key << ", value='" << value << "'";
+    ASSERT_TRUE(env_.has_value());
     ASSERT_EQ(value, env_.value());
   }
 }
@@ -32,10 +31,7 @@ TEST(EnvironmentTest, AllEnv1) {
 TEST(EnvironmentTest, GenEnv1) {
   ASSERT_TRUE(env::getenv("PATH").has_value());
 #if defined(_WIN32)
-  ASSERT_TRUE(env::getenv("USERPROFILE").has_value());
-#if defined(UNICODE) || defined(_UNICODE)
-  ASSERT_TRUE(env::getenv(L"USERPROFILE").has_value());
-#endif
+  ASSERT_TRUE(env::getenv(TEXT("USERPROFILE")).has_value());
 #else
   ASSERT_TRUE(env::getenv("HOME").has_value());
   ASSERT_TRUE(env::getenv("USER").has_value());
