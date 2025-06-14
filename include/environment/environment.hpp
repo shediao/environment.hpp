@@ -110,10 +110,9 @@ std::optional<std::basic_string<CharT>> getenv(
     std::basic_string<CharT> const& name) {
   size_t size = 0;
   if constexpr (std::is_same_v<char, CharT>) {
-    auto wname = detail::to_wstring(name);
-    GetEnvironmentVariable(wname.c_str(), nullptr, 0);
+    size = GetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr, 0);
   } else {
-    GetEnvironmentVariable(name.c_str(), nullptr, 0);
+    size = GetEnvironmentVariable(name.c_str(), nullptr, 0);
   }
   if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
     return std::nullopt;
@@ -121,8 +120,8 @@ std::optional<std::basic_string<CharT>> getenv(
   std::vector<wchar_t> value(size);
 
   if constexpr (std::is_same_v<char, CharT>) {
-    auto wname = detail::to_wstring(name);
-    GetEnvironmentVariable(wname.c_str(), value.data(), size);
+    GetEnvironmentVariable(detail::to_wstring(name).c_str(), value.data(),
+                           size);
   } else {
     GetEnvironmentVariable(name.c_str(), value.data(), size);
   }
@@ -164,8 +163,8 @@ bool setenv(std::basic_string<CharT> const& name,
   if (!overwrite) {
     size_t size = 0;
     if constexpr (std::is_same_v<char, CharT>) {
-      auto wname = detail::to_wstring(name);
-      size = GetEnvironmentVariable(wname.c_str(), nullptr, 0);
+      size =
+          GetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr, 0);
     } else {
       size = GetEnvironmentVariable(name.c_str(), nullptr, 0);
     }
@@ -174,9 +173,8 @@ bool setenv(std::basic_string<CharT> const& name,
     }
   }
   if constexpr (std::is_same_v<char, CharT>) {
-    auto wname = detail::to_wstring(name);
-    auto wvalue = detail::to_wstring(value);
-    return SetEnvironmentVariable(wname.c_str(), wvalue.c_str());
+    return SetEnvironmentVariable(detail::to_wstring(name).c_str(),
+                                  detail::to_wstring(value).c_str());
   } else {
     return SetEnvironmentVariable(name.c_str(), value.c_str());
   }
@@ -213,8 +211,7 @@ bool unsetenv(std::basic_string<CharT> const& name) {
     return false;
   }
   if constexpr (std::is_same_v<char, CharT>) {
-    auto wname = detail::to_wstring(name);
-    return SetEnvironmentVariable(wname.c_str(), nullptr);
+    return SetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr);
   } else {
     return SetEnvironmentVariable(name.c_str(), nullptr);
   }
@@ -257,7 +254,7 @@ inline std::map<std::wstring, std::wstring> environs<std::wstring>() {
       auto value = std::wstring(envString.substr(pos + 1));
       std::transform(key.begin(), key.end(), key.begin(),
                      [](wchar_t c) { return std::towupper(c); });
-      envs[key] = value;
+      envs[std::move(key)] = std::move(value);
     }
     currentEnv +=
         envString.length() + 1;  // Move to the next environment variable

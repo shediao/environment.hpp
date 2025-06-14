@@ -23,7 +23,8 @@ TEST(EnvironmentTest, AllEnv1) {
 #endif
   for (auto const& [key, value] : envs) {
     auto env_ = env::getenv(key);
-    ASSERT_TRUE(env_.has_value());
+    ASSERT_TRUE(env_.has_value())
+        << "environment: key=" << key << ", value='" << value << "'";
     ASSERT_EQ(value, env_.value());
   }
 }
