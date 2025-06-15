@@ -12,7 +12,7 @@ using namespace process::detail::named_args;
   std::pair<std::string, std::string> { x "KEY_" #y, x "VALUE_" #y }
 
 TEST(EnvironmentTest, AllEnv1) {
-  auto envs = env::environs();
+  auto envs = env::all();
   ASSERT_GT(envs.size(), 0);
 #if defined(_WIN32) && defined(UNICODE)
   ASSERT_TRUE(
@@ -22,7 +22,7 @@ TEST(EnvironmentTest, AllEnv1) {
       (std::is_same_v<decltype(envs)::value_type::second_type, std::string>));
 #endif
   for (auto const& [key, value] : envs) {
-    auto env_ = env::getenv(key);
+    auto env_ = env::get(key);
     ASSERT_TRUE(env_.has_value())
         << "environment: key=" << key << ", value='" << value << "'";
     ASSERT_EQ(value, env_.value());
@@ -30,18 +30,18 @@ TEST(EnvironmentTest, AllEnv1) {
 }
 
 TEST(EnvironmentTest, GenEnv1) {
-  ASSERT_TRUE(env::getenv("PATH").has_value());
+  ASSERT_TRUE(env::get("PATH").has_value());
 #if defined(_WIN32)
-  ASSERT_TRUE(env::getenv(TEXT("USERPROFILE")).has_value());
+  ASSERT_TRUE(env::get(TEXT("USERPROFILE")).has_value());
 #else
-  ASSERT_TRUE(env::getenv("HOME").has_value());
-  ASSERT_TRUE(env::getenv("USER").has_value());
+  ASSERT_TRUE(env::get("HOME").has_value());
+  ASSERT_TRUE(env::get("USER").has_value());
 #endif
 }
 
 TEST(EnvironmentTest, SetEnv1) {
   auto [key, value] = MK_ENV();
-  env::setenv(key, value);
+  env::set(key, value);
   std::vector<char> stdout_;
 #if defined(_WIN32)
   process::run("cmd.exe", "/c", "<nul set /p=%" + key + "%&exit /b 0",
@@ -51,13 +51,13 @@ TEST(EnvironmentTest, SetEnv1) {
 #endif
   ASSERT_EQ(std::string_view(stdout_.data(), stdout_.size()), value);
 
-  ASSERT_TRUE(env::getenv(key).has_value());
-  ASSERT_EQ(env::getenv(key).value_or(""), value);
+  ASSERT_TRUE(env::get(key).has_value());
+  ASSERT_EQ(env::get(key).value_or(""), value);
 }
 
 TEST(EnvironmentTest, UnsetEnv1) {
   auto [key, value] = MK_ENV();
-  env::setenv(key, value);
+  env::set(key, value);
   std::vector<char> stdout_;
 #if defined(_WIN32)
   process::run("cmd.exe", "/c", "<nul set /p=%" + key + "%&exit /b 0",
@@ -67,7 +67,7 @@ TEST(EnvironmentTest, UnsetEnv1) {
 #endif
   ASSERT_EQ(std::string_view(stdout_.data(), stdout_.size()), value);
 
-  env::unsetenv(key);
+  env::unset(key);
   stdout_.clear();
 #if defined(_WIN32)
   process::run("cmd.exe", "/c",

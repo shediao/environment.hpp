@@ -59,7 +59,7 @@ inline std::string to_string(const std::wstring& wstr) {
 }  // namespace detail
 
 #if !defined(_WIN32)
-inline std::optional<std::string> getenv(std::string const& name) {
+inline std::optional<std::string> get(std::string const& name) {
   auto* env = ::getenv(name.c_str());
   if (env) {
     return std::string(env);
@@ -67,8 +67,8 @@ inline std::optional<std::string> getenv(std::string const& name) {
   return std::nullopt;
 }
 
-inline bool setenv(std::string const& name, std::string const& value,
-                   bool overwrite = true) {
+inline bool set(std::string const& name, std::string const& value,
+                bool overwrite = true) {
   if (name.empty()) {
     return false;
   }
@@ -78,13 +78,13 @@ inline bool setenv(std::string const& name, std::string const& value,
   return true;
 }
 
-inline bool unsetenv(std::string const& name) {
+inline bool unset(std::string const& name) {
   if (name.empty()) {
     return false;
   }
   return ::unsetenv(name.c_str()) == 0;
 }
-inline std::map<std::string, std::string> environs() {
+inline std::map<std::string, std::string> all() {
   std::map<std::string, std::string> envs;
   if (environ == nullptr) {
     return envs;
@@ -105,7 +105,7 @@ inline std::map<std::string, std::string> environs() {
 
 #if defined(UNICODE)
 template <typename CharT>
-std::optional<std::basic_string<CharT>> getenv(
+std::optional<std::basic_string<CharT>> get(
     std::basic_string<CharT> const& name) {
   size_t size = 0;
   if constexpr (std::is_same_v<char, CharT>) {
@@ -132,14 +132,14 @@ std::optional<std::basic_string<CharT>> getenv(
     return ret;
   }
 }
-inline std::optional<std::string> getenv(std::string const& name) {
-  return getenv<char>(name);
+inline std::optional<std::string> get(std::string const& name) {
+  return get<char>(name);
 }
-inline std::optional<std::wstring> getenv(std::wstring const& name) {
-  return getenv<wchar_t>(name);
+inline std::optional<std::wstring> get(std::wstring const& name) {
+  return get<wchar_t>(name);
 }
 #else
-inline std::optional<std::string> getenv(std::string const& name) {
+inline std::optional<std::string> get(std::string const& name) {
   auto const size = GetEnvironmentVariableA(name.c_str(), nullptr, 0);
   if (size == 0) {
     return GetLastError() == ERROR_ENVVAR_NOT_FOUND
@@ -154,8 +154,8 @@ inline std::optional<std::string> getenv(std::string const& name) {
 
 #if defined(UNICODE)
 template <typename CharT>
-bool setenv(std::basic_string<CharT> const& name,
-            std::basic_string<CharT> const& value, bool overwrite = true) {
+bool set(std::basic_string<CharT> const& name,
+         std::basic_string<CharT> const& value, bool overwrite = true) {
   if (name.empty()) {
     return false;
   }
@@ -178,17 +178,17 @@ bool setenv(std::basic_string<CharT> const& name,
     return SetEnvironmentVariable(name.c_str(), value.c_str());
   }
 }
-inline bool setenv(std::string const& name, std::string const& value,
-                   bool overwrite = true) {
-  return setenv<char>(name, value, overwrite);
+inline bool set(std::string const& name, std::string const& value,
+                bool overwrite = true) {
+  return set<char>(name, value, overwrite);
 }
-inline bool setenv(std::wstring const& name, std::wstring const& value,
-                   bool overwrite = true) {
-  return setenv<wchar_t>(name, value, overwrite);
+inline bool set(std::wstring const& name, std::wstring const& value,
+                bool overwrite = true) {
+  return set<wchar_t>(name, value, overwrite);
 }
 #else
-inline bool setenv(std::string const& name, std::string const& value,
-                   bool overwrite = true) {
+inline bool set(std::string const& name, std::string const& value,
+                bool overwrite = true) {
   if (name.empty()) {
     return false;
   }
@@ -205,7 +205,7 @@ inline bool setenv(std::string const& name, std::string const& value,
 
 #if defined(UNICODE)
 template <typename CharT>
-bool unsetenv(std::basic_string<CharT> const& name) {
+bool unset(std::basic_string<CharT> const& name) {
   if (name.empty()) {
     return false;
   }
@@ -216,13 +216,11 @@ bool unsetenv(std::basic_string<CharT> const& name) {
   }
 }
 
-inline bool unsetenv(std::string const& name) { return unsetenv<char>(name); }
+inline bool unset(std::string const& name) { return unset<char>(name); }
 
-inline bool unsetenv(std::wstring const& name) {
-  return unsetenv<wchar_t>(name);
-}
+inline bool unset(std::wstring const& name) { return unset<wchar_t>(name); }
 #else
-inline bool unsetenv(std::string const& name) {
+inline bool unset(std::string const& name) {
   if (name.empty()) {
     return false;
   }
@@ -232,9 +230,9 @@ inline bool unsetenv(std::string const& name) {
 
 #if defined(UNICODE)
 template <typename StringType = std::wstring>
-std::map<StringType, StringType> environs();
+std::map<StringType, StringType> all();
 template <>
-inline std::map<std::wstring, std::wstring> environs<std::wstring>() {
+inline std::map<std::wstring, std::wstring> all<std::wstring>() {
   std::map<std::wstring, std::wstring> envs;
   wchar_t* envBlock = GetEnvironmentStrings();
   if (envBlock == nullptr) {
@@ -263,16 +261,16 @@ inline std::map<std::wstring, std::wstring> environs<std::wstring>() {
   return envs;
 }
 template <>
-inline std::map<std::string, std::string> environs<std::string>() {
+inline std::map<std::string, std::string> all<std::string>() {
   std::map<std::string, std::string> envs;
-  for (auto const& [key, val] : environs<std::wstring>()) {
+  for (auto const& [key, val] : all<std::wstring>()) {
     envs[detail::to_string(key)] = detail::to_string(val);
   }
   return envs;
 }
 #else
 
-inline std::map<std::string, std::string> environs() {
+inline std::map<std::string, std::string> all() {
   std::map<std::string, std::string> envs;
 
   auto* envBlock = GetEnvironmentStrings();
