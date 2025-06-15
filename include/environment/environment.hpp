@@ -21,7 +21,8 @@ extern char** environ;
 namespace env {
 
 namespace detail {
-#if (defined(_WIN32) || defined(_WIN64)) && defined(UNICODE)
+#if defined(_WIN32)
+#if defined(UNICODE)
 // Helper function to convert a UTF-8 std::string to a UTF-16 std::wstring
 inline std::wstring to_wstring(const std::string& str) {
   if (str.empty()) {
@@ -55,7 +56,74 @@ inline std::string to_string(const std::wstring& wstr) {
                       size_needed, NULL, NULL);
   return str;
 }
-#endif
+template <typename CharT>
+std::optional<std::basic_string<CharT>> get(
+    std::basic_string<CharT> const& name) {
+  size_t size = 0;
+  if constexpr (std::is_same_v<char, CharT>) {
+    size = GetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr, 0);
+  } else {
+    size = GetEnvironmentVariable(name.c_str(), nullptr, 0);
+  }
+  if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+    return std::nullopt;
+  }
+  std::vector<wchar_t> value(size);
+
+  if constexpr (std::is_same_v<char, CharT>) {
+    GetEnvironmentVariable(detail::to_wstring(name).c_str(), value.data(),
+                           size);
+  } else {
+    GetEnvironmentVariable(name.c_str(), value.data(), size);
+  }
+  std::wstring ret{value.data()};
+
+  if constexpr (std::is_same_v<char, CharT>) {
+    return detail::to_string(ret);
+  } else {
+    return ret;
+  }
+}
+
+template <typename CharT>
+bool set(std::basic_string<CharT> const& name,
+         std::basic_string<CharT> const& value, bool overwrite = true) {
+  if (name.empty()) {
+    return false;
+  }
+  if (!overwrite) {
+    size_t size = 0;
+    if constexpr (std::is_same_v<char, CharT>) {
+      size =
+          GetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr, 0);
+    } else {
+      size = GetEnvironmentVariable(name.c_str(), nullptr, 0);
+    }
+    if (size != 0 || GetLastError() != ERROR_ENVVAR_NOT_FOUND) {
+      return true;
+    }
+  }
+  if constexpr (std::is_same_v<char, CharT>) {
+    return SetEnvironmentVariable(detail::to_wstring(name).c_str(),
+                                  detail::to_wstring(value).c_str());
+  } else {
+    return SetEnvironmentVariable(name.c_str(), value.c_str());
+  }
+}
+
+template <typename CharT>
+bool unset(std::basic_string<CharT> const& name) {
+  if (name.empty()) {
+    return false;
+  }
+  if constexpr (std::is_same_v<char, CharT>) {
+    return SetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr);
+  } else {
+    return SetEnvironmentVariable(name.c_str(), nullptr);
+  }
+}
+#endif  // !UNICODE
+#endif  // _WIN32
 }  // namespace detail
 
 #if !defined(_WIN32)
@@ -104,39 +172,11 @@ inline std::map<std::string, std::string> all() {
 #else  // !_WIN32
 
 #if defined(UNICODE)
-template <typename CharT>
-std::optional<std::basic_string<CharT>> get(
-    std::basic_string<CharT> const& name) {
-  size_t size = 0;
-  if constexpr (std::is_same_v<char, CharT>) {
-    size = GetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr, 0);
-  } else {
-    size = GetEnvironmentVariable(name.c_str(), nullptr, 0);
-  }
-  if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-    return std::nullopt;
-  }
-  std::vector<wchar_t> value(size);
-
-  if constexpr (std::is_same_v<char, CharT>) {
-    GetEnvironmentVariable(detail::to_wstring(name).c_str(), value.data(),
-                           size);
-  } else {
-    GetEnvironmentVariable(name.c_str(), value.data(), size);
-  }
-  std::wstring ret{value.data()};
-
-  if constexpr (std::is_same_v<char, CharT>) {
-    return detail::to_string(ret);
-  } else {
-    return ret;
-  }
-}
 inline std::optional<std::string> get(std::string const& name) {
-  return get<char>(name);
+  return detail::get<char>(name);
 }
 inline std::optional<std::wstring> get(std::wstring const& name) {
-  return get<wchar_t>(name);
+  return detail::get<wchar_t>(name);
 }
 #else
 inline std::optional<std::string> get(std::string const& name) {
@@ -153,38 +193,13 @@ inline std::optional<std::string> get(std::string const& name) {
 #endif  // !UNICODE
 
 #if defined(UNICODE)
-template <typename CharT>
-bool set(std::basic_string<CharT> const& name,
-         std::basic_string<CharT> const& value, bool overwrite = true) {
-  if (name.empty()) {
-    return false;
-  }
-  if (!overwrite) {
-    size_t size = 0;
-    if constexpr (std::is_same_v<char, CharT>) {
-      size =
-          GetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr, 0);
-    } else {
-      size = GetEnvironmentVariable(name.c_str(), nullptr, 0);
-    }
-    if (size != 0 || GetLastError() != ERROR_ENVVAR_NOT_FOUND) {
-      return true;
-    }
-  }
-  if constexpr (std::is_same_v<char, CharT>) {
-    return SetEnvironmentVariable(detail::to_wstring(name).c_str(),
-                                  detail::to_wstring(value).c_str());
-  } else {
-    return SetEnvironmentVariable(name.c_str(), value.c_str());
-  }
-}
 inline bool set(std::string const& name, std::string const& value,
                 bool overwrite = true) {
-  return set<char>(name, value, overwrite);
+  return detail::set<char>(name, value, overwrite);
 }
 inline bool set(std::wstring const& name, std::wstring const& value,
                 bool overwrite = true) {
-  return set<wchar_t>(name, value, overwrite);
+  return detail::set<wchar_t>(name, value, overwrite);
 }
 #else
 inline bool set(std::string const& name, std::string const& value,
@@ -204,21 +219,11 @@ inline bool set(std::string const& name, std::string const& value,
 #endif  // !UNICODE
 
 #if defined(UNICODE)
-template <typename CharT>
-bool unset(std::basic_string<CharT> const& name) {
-  if (name.empty()) {
-    return false;
-  }
-  if constexpr (std::is_same_v<char, CharT>) {
-    return SetEnvironmentVariable(detail::to_wstring(name).c_str(), nullptr);
-  } else {
-    return SetEnvironmentVariable(name.c_str(), nullptr);
-  }
+inline bool unset(std::string const& name) { return detail::unset<char>(name); }
+
+inline bool unset(std::wstring const& name) {
+  return detail::unset<wchar_t>(name);
 }
-
-inline bool unset(std::string const& name) { return unset<char>(name); }
-
-inline bool unset(std::wstring const& name) { return unset<wchar_t>(name); }
 #else
 inline bool unset(std::string const& name) {
   if (name.empty()) {
@@ -268,6 +273,13 @@ inline std::map<std::string, std::string> all<std::string>() {
   }
   return envs;
 }
+inline std::map<std::string, std::string> allutf8() {
+  return all<std::string>();
+}
+inline std::map<std::wstring, std::wstring> allutf16() {
+  return all<std::wstring>();
+}
+
 #else
 
 inline std::map<std::string, std::string> all() {
