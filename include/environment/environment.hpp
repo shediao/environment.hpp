@@ -21,8 +21,7 @@ extern char** environ;
 namespace env {
 
 namespace detail {
-#if (defined(_WIN32) || defined(_WIN64)) && \
-    (defined(UNICODE) || defined(_UNICODE))
+#if (defined(_WIN32) || defined(_WIN64)) && defined(UNICODE)
 // Helper function to convert a UTF-8 std::string to a UTF-16 std::wstring
 inline std::wstring to_wstring(const std::string& str) {
   if (str.empty()) {
@@ -104,7 +103,7 @@ inline std::map<std::string, std::string> environs() {
 }
 #else  // !_WIN32
 
-#if defined(UNICODE) || defined(_UNICODE)
+#if defined(UNICODE)
 template <typename CharT>
 std::optional<std::basic_string<CharT>> getenv(
     std::basic_string<CharT> const& name) {
@@ -153,7 +152,7 @@ inline std::optional<std::string> getenv(std::string const& name) {
 }
 #endif  // !UNICODE
 
-#if defined(UNICODE) || defined(_UNICODE)
+#if defined(UNICODE)
 template <typename CharT>
 bool setenv(std::basic_string<CharT> const& name,
             std::basic_string<CharT> const& value, bool overwrite = true) {
@@ -204,7 +203,7 @@ inline bool setenv(std::string const& name, std::string const& value,
 }
 #endif  // !UNICODE
 
-#if defined(UNICODE) || defined(_UNICODE)
+#if defined(UNICODE)
 template <typename CharT>
 bool unsetenv(std::basic_string<CharT> const& name) {
   if (name.empty()) {
@@ -231,7 +230,7 @@ inline bool unsetenv(std::string const& name) {
 }
 #endif  // !UNICODE
 
-#if defined(UNICODE) || defined(_UNICODE)
+#if defined(UNICODE)
 template <typename StringType = std::wstring>
 std::map<StringType, StringType> environs();
 template <>

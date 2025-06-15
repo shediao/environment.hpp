@@ -7,7 +7,7 @@ TEST(TestEnv, Unicode) {
   auto key = "名字";
   auto value = "哇哈哈";
 
-#if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
+#if defined(_WIN32) && defined(UNICODE)
   auto wkey = L"名字";
   auto wvalue = L"哇哈哈";
 #endif
@@ -16,7 +16,7 @@ TEST(TestEnv, Unicode) {
   ASSERT_TRUE(env::setenv(key, value));
   ASSERT_TRUE(env::getenv(key).has_value());
   ASSERT_EQ(env::getenv(key).value(), value);
-#if defined(UNICODE) || defined(_UNICODE)
+#if defined(UNICODE)
   ASSERT_TRUE(env::getenv(wkey).has_value());
   ASSERT_EQ(env::getenv(wkey).value(), wvalue);
 #endif
@@ -27,7 +27,7 @@ TEST(TestEnv, Unicode) {
 
 TEST(TestEnv, Unicode2) {
   ASSERT_FALSE(env::environs().empty());
-#if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
+#if defined(_WIN32) && defined(UNICODE)
   ASSERT_FALSE(env::environs<std::wstring>().empty());
 #endif
 }
@@ -76,7 +76,7 @@ TEST(TestEnv, UnicodeNoOverwrite) {
   env::unsetenv(key);
 }
 
-#if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
+#if defined(_WIN32) && defined(UNICODE)
 TEST(TestEnv, EnvironmentsWithUnicode) {
   auto key = "你好世界";
   auto value = "Hello World From Unicode";
