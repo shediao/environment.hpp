@@ -4,7 +4,6 @@
 #include <cctype>
 #include <cstdlib>
 #include <cwctype>
-#include <locale>
 #include <map>
 #include <optional>
 #include <string>
@@ -256,7 +255,7 @@ inline std::map<std::wstring, std::wstring> all<std::wstring>() {
       auto key = std::wstring(envString.substr(0, pos));
       auto value = std::wstring(envString.substr(pos + 1));
       std::transform(key.begin(), key.end(), key.begin(),
-                     [](wchar_t c) { return std::toupper(c, std::locale()); });
+                     [](wchar_t c) { return std::towupper(c); });
       envs[std::move(key)] = std::move(value);
     }
     currentEnv +=
@@ -304,9 +303,8 @@ inline std::map<std::string, std::string> all() {
     if (pos != std::string_view::npos) {
       auto key = std::string(envString.substr(0, pos));
       auto value = std::string(envString.substr(pos + 1));
-      std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) {
-        return std::toupper(c, std::locale());
-      });
+      std::transform(key.begin(), key.end(), key.begin(),
+                     [](unsigned char c) { return std::toupper(c); });
       envs[std::move(key)] = std::move(value);
     }
     currentEnv +=
