@@ -14,13 +14,6 @@ using namespace process::detail::named_args;
 TEST(EnvironmentTest, AllEnv1) {
   auto envs = env::all();
   ASSERT_GT(envs.size(), 0);
-#if defined(_WIN32) && defined(UNICODE)
-  ASSERT_TRUE(
-      (std::is_same_v<decltype(envs)::value_type::second_type, std::wstring>));
-#else
-  ASSERT_TRUE(
-      (std::is_same_v<decltype(envs)::value_type::second_type, std::string>));
-#endif
   for (auto const& [key, value] : envs) {
     auto env_ = env::get(key);
     ASSERT_TRUE(env_.has_value())

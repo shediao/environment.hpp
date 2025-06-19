@@ -7,7 +7,7 @@ TEST(TestEnv, Unicode) {
   auto key = "名字";
   auto value = "哇哈哈";
 
-#if defined(_WIN32) && defined(UNICODE)
+#if defined(_WIN32)
   auto wkey = L"名字";
   auto wvalue = L"哇哈哈";
 #endif
@@ -16,7 +16,7 @@ TEST(TestEnv, Unicode) {
   ASSERT_TRUE(env::set(key, value));
   ASSERT_TRUE(env::get(key).has_value());
   ASSERT_EQ(env::get(key).value(), value);
-#if defined(UNICODE)
+#if defined(_WIN32)
   ASSERT_TRUE(env::get(wkey).has_value());
   ASSERT_EQ(env::get(wkey).value(), wvalue);
 #endif
@@ -27,7 +27,7 @@ TEST(TestEnv, Unicode) {
 
 TEST(TestEnv, Unicode2) {
   ASSERT_FALSE(env::all().empty());
-#if defined(_WIN32) && defined(UNICODE)
+#if defined(_WIN32)
   ASSERT_FALSE(env::all<std::wstring>().empty());
 #endif
 }
@@ -76,7 +76,7 @@ TEST(TestEnv, UnicodeNoOverwrite) {
   env::unset(key);
 }
 
-#if defined(_WIN32) && defined(UNICODE)
+#if defined(_WIN32)
 TEST(TestEnv, EnvironmentsWithUnicode) {
   auto key = "你好世界";
   auto value = "Hello World From Unicode";
@@ -106,7 +106,8 @@ TEST(TestEnv, EnvironmentsWithUnicode) {
   // transform key_ascii to upper case
   std::string upper_key_ascii = key_ascii;
   std::transform(upper_key_ascii.begin(), upper_key_ascii.end(),
-                 upper_key_ascii.begin(), ::toupper);
+                 upper_key_ascii.begin(),
+                 [](char c) { return std::toupper(c, std::locale()); });
 
   auto it_s = envs_s.find(upper_key_ascii);
   ASSERT_NE(it_s, envs_s.end());
