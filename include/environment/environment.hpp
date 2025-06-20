@@ -24,35 +24,37 @@ namespace env {
 namespace detail {
 #if defined(_WIN32)
 // Helper function to convert a UTF-8 std::string to a UTF-16 std::wstring
-inline std::wstring to_wstring(const std::string& utf8str) {
+inline std::wstring to_wstring(const std::string& utf8str,
+                               const UINT from_codepage = CP_UTF8) {
   if (utf8str.empty()) {
     return {};
   }
-  int size_needed = MultiByteToWideChar(CP_UTF8, 0, &utf8str[0],
+  int size_needed = MultiByteToWideChar(from_codepage, 0, &utf8str[0],
                                         (int)utf8str.size(), NULL, 0);
   if (size_needed <= 0) {
     // Consider throwing an exception for conversion errors
     return {};
   }
   std::wstring utf16str(size_needed, 0);
-  MultiByteToWideChar(CP_UTF8, 0, &utf8str[0], (int)utf8str.size(),
+  MultiByteToWideChar(from_codepage, 0, &utf8str[0], (int)utf8str.size(),
                       &utf16str[0], size_needed);
   return utf16str;
 }
 
 // Helper function to convert a UTF-16 std::wstring to a UTF-8 std::string
-inline std::string to_string(const std::wstring& utf16str) {
+inline std::string to_string(const std::wstring& utf16str,
+                             const UINT to_codepage = CP_UTF8) {
   if (utf16str.empty()) {
     return {};
   }
   int size_needed = WideCharToMultiByte(
-      CP_UTF8, 0, &utf16str[0], (int)utf16str.size(), NULL, 0, NULL, NULL);
+      to_codepage, 0, &utf16str[0], (int)utf16str.size(), NULL, 0, NULL, NULL);
   if (size_needed <= 0) {
     // Consider throwing an exception for conversion errors
     return {};
   }
   std::string utf8str(size_needed, 0);
-  WideCharToMultiByte(CP_UTF8, 0, &utf16str[0], (int)utf16str.size(),
+  WideCharToMultiByte(to_codepage, 0, &utf16str[0], (int)utf16str.size(),
                       &utf8str[0], size_needed, NULL, NULL);
   return utf8str;
 }
