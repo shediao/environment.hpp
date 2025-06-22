@@ -16,7 +16,9 @@
 #include <locale>
 #include <vector>
 #else
+extern "C" {
 extern char** environ;
+}
 #endif
 
 namespace env {
