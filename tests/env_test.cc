@@ -71,3 +71,17 @@ TEST(EnvironmentTest, UnsetEnv1) {
 #endif
   ASSERT_TRUE(stdout_.empty()) << "stdout_='" << stdout_.data() << "'";
 }
+
+#if defined(_WIN32)
+TEST(EnvironmentTest, ExpandTest) {
+  using namespace std::string_literals;
+  for (auto const s : {"USERPROFILE", "APPDATA", "TMP", "USERNAME", "PATH",
+                       "APPDATA", "ProgramFiles", "SystemRoot"}) {
+    auto e = env::expand("%"s + s + "%");
+    ASSERT_TRUE(!e.empty() && e[0] != '%');
+
+    auto ew = env::expand(L"%"s + env::detail::to_wstring(s) + L"%"s);
+    ASSERT_TRUE(!ew.empty() && ew[0] != L'%');
+  }
+}
+#endif

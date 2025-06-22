@@ -3,7 +3,6 @@
 
 #include <cctype>
 #include <cstdlib>
-#include <cwctype>
 #include <map>
 #include <optional>
 #include <string>
@@ -128,6 +127,38 @@ bool unset(std::basic_string<CharT> const& name) {
     return SetEnvironmentVariableW(name.c_str(), nullptr);
   }
 }
+
+template <typename CharT>
+std::basic_string<CharT> expand(std::basic_string<CharT> const& str) {
+  if (str.empty()) {
+    return {};
+  }
+  size_t size = 0;
+  if constexpr (std::is_same_v<char, CharT>) {
+    size =
+        ExpandEnvironmentStringsW(detail::to_wstring(str).c_str(), nullptr, 0);
+  } else {
+    size = ExpandEnvironmentStringsW(str.c_str(), nullptr, 0);
+  }
+  if (size == 0) {
+    return str;
+  }
+
+  std::vector<wchar_t> value(size);
+  if constexpr (std::is_same_v<char, CharT>) {
+    ExpandEnvironmentStringsW(detail::to_wstring(str).c_str(), value.data(),
+                              size);
+  } else {
+    ExpandEnvironmentStringsW(str.c_str(), value.data(), size);
+  }
+  std::wstring ret{value.data()};
+
+  if constexpr (std::is_same_v<char, CharT>) {
+    return detail::to_string(ret);
+  } else {
+    return ret;
+  }
+}
 #endif  // _WIN32
 }  // namespace detail
 
@@ -196,6 +227,14 @@ inline bool unset(std::string const& name) { return detail::unset<char>(name); }
 
 inline bool unset(std::wstring const& name) {
   return detail::unset<wchar_t>(name);
+}
+
+inline std::string expand(std::string const& name) {
+  return detail::expand<char>(name);
+}
+
+inline std::wstring expand(std::wstring const& name) {
+  return detail::expand<wchar_t>(name);
 }
 
 template <typename StringType = std::wstring>
