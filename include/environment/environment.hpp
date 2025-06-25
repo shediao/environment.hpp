@@ -1,8 +1,6 @@
 #ifndef __ENVIRONMENT_ENVIRONMENT_HPP__
 #define __ENVIRONMENT_ENVIRONMENT_HPP__
 
-#include <cctype>
-#include <cstdlib>
 #include <map>
 #include <optional>
 #include <string>
@@ -63,7 +61,7 @@ inline std::string to_string(const std::wstring& utf16str,
 template <typename CharT>
 std::optional<std::basic_string<CharT>> get(
     std::basic_string<CharT> const& name) {
-  size_t size = 0;
+  DWORD size = 0;
   if constexpr (std::is_same_v<char, CharT>) {
     size =
         GetEnvironmentVariableW(detail::to_wstring(name).c_str(), nullptr, 0);
@@ -97,7 +95,7 @@ bool set(std::basic_string<CharT> const& name,
     return false;
   }
   if (!overwrite) {
-    size_t size = 0;
+    DWORD size = 0;
     if constexpr (std::is_same_v<char, CharT>) {
       size =
           GetEnvironmentVariableW(detail::to_wstring(name).c_str(), nullptr, 0);
@@ -133,7 +131,7 @@ std::basic_string<CharT> expand(std::basic_string<CharT> const& str) {
   if (str.empty()) {
     return {};
   }
-  size_t size = 0;
+  DWORD size = 0;
   if constexpr (std::is_same_v<char, CharT>) {
     size =
         ExpandEnvironmentStringsW(detail::to_wstring(str).c_str(), nullptr, 0);

@@ -83,5 +83,8 @@ TEST(EnvironmentTest, ExpandTest) {
     auto ew = env::expand(L"%"s + env::detail::to_wstring(s) + L"%"s);
     ASSERT_TRUE(!ew.empty() && ew[0] != L'%');
   }
+
+  env::unset("THIS_ENV_NOT_EXISTS");
+  ASSERT_EQ(env::expand("%THIS_ENV_NOT_EXISTS%"), "%THIS_ENV_NOT_EXISTS%");
 }
 #endif
