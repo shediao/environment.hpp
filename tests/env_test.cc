@@ -88,3 +88,45 @@ TEST(EnvironmentTest, ExpandTest) {
   ASSERT_EQ(env::expand("%THIS_ENV_NOT_EXISTS%"), "%THIS_ENV_NOT_EXISTS%");
 }
 #endif
+
+TEST(EnvironmentTest, WithEnv) {
+  using env::with_env;
+  constexpr char key[] = "TEST_WITH_ENV_RAII";
+  constexpr char value[] = "123";
+  {
+    ASSERT_FALSE(env::get(key));
+    with_env e(key, value);
+    ASSERT_TRUE(env::get(key));
+    ASSERT_EQ(env::get(key).value(), value);
+  }
+  ASSERT_FALSE(env::get(key));
+
+  env::set(key, value);
+  {
+    ASSERT_TRUE(env::get(key));
+    with_env e(key, std::nullopt);
+    ASSERT_FALSE(env::get(key));
+  }
+  ASSERT_TRUE(env::get(key));
+  env::unset(key);
+
+#if defined(_WIN32)
+  constexpr wchar_t wkey[] = L"TEST_WITH_ENV_RAII";
+  constexpr wchar_t wvalue[] = L"123";
+  {
+    with_env e(wkey, wvalue);
+    ASSERT_TRUE(env::get(wkey));
+    ASSERT_EQ(env::get(wkey).value(), wvalue);
+  }
+  ASSERT_FALSE(env::get(wkey));
+
+  env::set(wkey, wvalue);
+  {
+    ASSERT_TRUE(env::get(wkey));
+    with_env e(wkey, std::nullopt);
+    ASSERT_FALSE(env::get(wkey));
+  }
+  ASSERT_TRUE(env::get(wkey));
+  env::unset(wkey);
+#endif
+}

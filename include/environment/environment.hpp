@@ -282,6 +282,46 @@ inline std::map<std::wstring, std::wstring> allutf16() {
 }
 #endif  // _WIN32
 
+// RAII helper to set and restore an environment variable.
+class with_env {
+#if defined(_WIN32)
+  using string_type = std::wstring;
+#else
+  using string_type = std::string;
+#endif
+ public:
+  with_env(string_type const& var, std::optional<string_type> const& value)
+      : var_(var) {
+    if (auto v = get(var); v.has_value()) {
+      original_value_.emplace(v.value());
+    }
+    if (value) {
+      set(var, value.value(), true);
+    } else {
+      unset(var);
+    }
+  }
+#if defined(_WIN32)
+  with_env(std::string const& var, std::optional<std::string> const& value)
+      : with_env(
+            detail::to_wstring(var),
+            value
+                ? std::optional<string_type>{detail::to_wstring(value.value())}
+                : std::nullopt) {}
+#endif
+  ~with_env() {
+    if (original_value_) {
+      set(var_, original_value_->c_str(), 1);
+    } else {
+      unset(var_);
+    }
+  }
+
+ private:
+  const string_type var_;
+  std::optional<string_type> original_value_;
+};
+
 }  // namespace env
 
 #endif  // __ENVIRONMENT_ENVIRONMENT_HPP__
