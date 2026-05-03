@@ -130,3 +130,135 @@ TEST(EnvironmentTest, WithEnv) {
   env::unset(wkey);
 #endif
 }
+
+// =============================================================================
+// env::path() tests
+// =============================================================================
+
+TEST(EnvironmentTest, PathNotEmpty) {
+  auto paths = env::path();
+  ASSERT_GT(paths.size(), 0) << "PATH should contain at least one directory";
+}
+
+TEST(EnvironmentTest, PathElementsNonEmpty) {
+  auto paths = env::path();
+  for (std::size_t i = 0; i < paths.size(); ++i) {
+    ASSERT_FALSE(paths[i].empty())
+        << "path() element at index " << i << " is empty";
+  }
+}
+
+TEST(EnvironmentTest, PathReconstructFromGet) {
+  // Each element returned by path() should appear as a substring in the
+  // original PATH value.
+  auto original_path = env::get("PATH");
+  ASSERT_TRUE(original_path.has_value());
+  auto paths = env::path();
+
+  // Reconstruct PATH by joining with the platform separator.
+  std::string reconstructed;
+#if defined(_WIN32)
+  constexpr char sep = ';';
+#else
+  constexpr char sep = ':';
+#endif
+  for (std::size_t i = 0; i < paths.size(); ++i) {
+    if (i > 0) {
+      reconstructed += sep;
+    }
+    reconstructed += paths[i];
+  }
+
+  // Every path element should appear in the original PATH.
+  for (auto const& p : paths) {
+    ASSERT_NE(original_path.value().find(p), std::string::npos)
+        << "path element '" << p << "' not found in PATH";
+  }
+
+  // The reconstructed string shouldn't exceed the original PATH in length
+  // (it may be shorter due to collapsing consecutive separators).
+  ASSERT_LE(reconstructed.size(), original_path.value().size());
+}
+
+TEST(EnvironmentTest, PathWithCustomValue) {
+  using env::with_env;
+  constexpr char key[] = "PATH";
+
+#if defined(_WIN32)
+  constexpr char custom_path[] = "C:\\foo;C:\\bar\\baz;C:\\qux";
+  constexpr char sep = ';';
+#else
+  constexpr char custom_path[] = "/usr/bin:/bin:/usr/local/bin";
+  constexpr char sep = ':';
+#endif
+
+  {
+    with_env e(key, custom_path);
+    auto paths = env::path();
+
+    // Reconstruct and verify
+    std::string reconstructed;
+    for (std::size_t i = 0; i < paths.size(); ++i) {
+      if (i > 0) {
+        reconstructed += sep;
+      }
+      reconstructed += paths[i];
+    }
+    ASSERT_EQ(reconstructed, custom_path);
+  }
+}
+
+TEST(EnvironmentTest, PathSingleElement) {
+  using env::with_env;
+  constexpr char key[] = "PATH";
+
+#if defined(_WIN32)
+  constexpr char custom_path[] = "C:\\only\\this\\dir";
+#else
+  constexpr char custom_path[] = "/only/this/dir";
+#endif
+
+  {
+    with_env e(key, custom_path);
+    auto paths = env::path();
+    ASSERT_EQ(paths.size(), 1);
+    ASSERT_EQ(paths[0], custom_path);
+  }
+}
+
+TEST(EnvironmentTest, PathWithConsecutiveSeparators) {
+  using env::with_env;
+  constexpr char key[] = "PATH";
+
+  // detail::split skips empty elements caused by consecutive delimiters,
+  // and also skips the trailing empty element if the string ends with the
+  // delimiter.
+#if defined(_WIN32)
+  {
+    with_env e(key, "C:\\a;;C:\\b;");
+    auto paths = env::path();
+    ASSERT_EQ(paths.size(), 2);
+    ASSERT_EQ(paths[0], "C:\\a");
+    ASSERT_EQ(paths[1], "C:\\b");
+  }
+#else
+  {
+    with_env e(key, "/usr/bin::/bin:");
+    auto paths = env::path();
+    ASSERT_EQ(paths.size(), 2);
+    ASSERT_EQ(paths[0], "/usr/bin");
+    ASSERT_EQ(paths[1], "/bin");
+  }
+#endif
+}
+
+TEST(EnvironmentTest, PathEmptyPath) {
+  using env::with_env;
+  constexpr char key[] = "PATH";
+
+  {
+    with_env e(key, "");
+    auto paths = env::path();
+    ASSERT_TRUE(paths.empty());
+  }
+}

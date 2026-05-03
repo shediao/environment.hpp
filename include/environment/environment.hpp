@@ -5,13 +5,13 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
 
 #include <algorithm>
 #include <locale>
-#include <vector>
 #else
 extern "C" {
 extern char** environ;
@@ -158,6 +158,30 @@ std::basic_string<CharT> expand(std::basic_string<CharT> const& str) {
   }
 }
 #endif  // _WIN32
+template <typename CharT>
+std::vector<std::basic_string<CharT>> split(std::basic_string<CharT> const& str,
+                                            CharT del) {
+  std::vector<std::basic_string<CharT>> ret;
+  if (str.empty()) {
+    return ret;
+  }
+
+  std::size_t start = 0;
+  std::size_t pos = 0;
+
+  while ((pos = str.find(del, start)) != std::basic_string<CharT>::npos) {
+    if (pos != start) {
+      ret.emplace_back(str.substr(start, pos - start));
+    }
+    start = pos + 1;
+  }
+  // Don't forget the last segment after the final delimiter
+  if (start != str.size()) {
+    ret.emplace_back(str.substr(start));
+  }
+
+  return ret;
+}
 }  // namespace detail
 
 #if !defined(_WIN32)
@@ -203,6 +227,12 @@ inline std::map<std::string, std::string> all() {
   }
   return envs;
 }
+
+inline std::vector<std::string> path() {
+  auto path = ::env::get("PATH").value_or("");
+  return detail::split(path, ':');
+}
+
 #else   // !_WIN32
 
 inline std::optional<std::string> get(std::string const& name) {
@@ -279,6 +309,15 @@ inline std::map<std::string, std::string> allutf8() {
 }
 inline std::map<std::wstring, std::wstring> allutf16() {
   return all<std::wstring>();
+}
+
+inline std::vector<std::string> path() {
+  auto path = ::env::get("PATH").value_or("");
+  return detail::split(path, ';');
+}
+inline std::vector<std::wstring> pathw() {
+  auto path = ::env::get(L"PATH").value_or(L"");
+  return detail::split(path, L';');
 }
 #endif  // _WIN32
 
