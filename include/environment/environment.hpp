@@ -58,11 +58,13 @@ template <typename T>
 concept string_like_type =
 #if defined(_WIN32)
     std::same_as<wchar_t*, std::decay_t<T>> ||
+    std::same_as<volatile wchar_t*, std::decay_t<T>> ||
     std::same_as<const wchar_t*, std::decay_t<T>> ||
     std::same_as<std::wstring, std::decay_t<T>> ||
     std::same_as<std::wstring_view, std::decay_t<T>> ||
 #endif
     std::same_as<char*, std::decay_t<T>> ||
+    std::same_as<volatile char*, std::decay_t<T>> ||
     std::same_as<const char*, std::decay_t<T>> ||
     std::same_as<std::string, std::decay_t<T>> ||
     std::same_as<std::string_view, std::decay_t<T>>;
@@ -71,9 +73,11 @@ template <typename T>
 concept cstr_like_type =
 #if defined(_WIN32)
     std::same_as<wchar_t*, std::decay_t<T>> ||
+    std::same_as<volatile wchar_t*, std::decay_t<T>> ||
     std::same_as<const wchar_t*, std::decay_t<T>> ||
 #endif
     std::same_as<char*, std::decay_t<T>> ||
+    std::same_as<volatile char*, std::decay_t<T>> ||
     std::same_as<const char*, std::decay_t<T>>;
 
 template <typename T>
@@ -94,6 +98,13 @@ struct get_char_type<CharT*> {
 
 template <typename T>
 using get_char_type_t = typename get_char_type<T>::type;
+
+template <typename T>
+using to_string_view_t =
+    std::basic_string_view<get_char_type_t<std::decay_t<T>>>;
+
+template <typename T>
+using to_string_t = std::basic_string<get_char_type_t<std::decay_t<T>>>;
 
 template <typename CharT>
 std::vector<std::basic_string<CharT>> split(std::basic_string<CharT> const& str,
@@ -327,21 +338,15 @@ inline void all(std::map<std::string, std::string>& envs) {
 }  // namespace detail
 
 template <detail::string_like_type T>
-inline std::optional<
-    std::basic_string<detail::get_char_type_t<std::decay_t<T>>>>
-get(T&& name) {
-  using CharT = detail::get_char_type_t<std::decay_t<T>>;
-  auto name_view = std::basic_string_view<CharT>(std::forward<T>(name));
-  return detail::get(name_view);
+inline std::optional<detail::to_string_t<T>> get(T&& name) {
+  return detail::get(detail::to_string_view_t<T>(std::forward<T>(name)));
 }
 
 template <detail::string_like_type K, detail::string_like_type V>
 inline bool set(K&& name, V&& value, bool overwrite = true) {
-  auto name_view =
-      std::basic_string_view<detail::get_char_type_t<std::decay_t<K>>>(name);
-  auto value_view =
-      std::basic_string_view<detail::get_char_type_t<std::decay_t<V>>>(value);
-  return detail::set(name_view, value_view, overwrite);
+  return detail::set(detail::to_string_view_t<K>(std::forward<K>(name)),
+                     detail::to_string_view_t<V>(std::forward<V>(value)),
+                     overwrite);
 }
 
 template <detail::string_like_type T>
@@ -351,9 +356,7 @@ inline bool unset(T&& name) {
       return false;
     }
   }
-  auto name_view =
-      std::basic_string_view<detail::get_char_type_t<std::decay_t<T>>>(name);
-  return detail::unset(name_view);
+  return detail::unset(detail::to_string_view_t<T>(std::forward<T>(name)));
 }
 
 inline std::vector<std::string> path() {
@@ -383,11 +386,8 @@ inline std::map<std::wstring, std::wstring> allw() {
   return envs;
 }
 template <detail::string_like_type T>
-inline std::basic_string<detail::get_char_type_t<std::decay_t<T>>> expand(
-    T&& name) {
-  auto name_view =
-      std::basic_string_view<detail::get_char_type_t<std::decay_t<T>>>(name);
-  return detail::expand(name_view);
+inline detail::to_string_t<T> expand(T&& name) {
+  return detail::expand(detail::to_string_view_t<T>(std::forward<T>(name)));
 }
 
 inline std::vector<std::wstring> pathw() {
@@ -429,17 +429,13 @@ class scoped_env {
 };
 }  // namespace detail
 
-template <typename F, typename T>
-  requires std::is_invocable_v<F>
-inline void with_env(
-    T&& var,
-    std::optional<
-        std::basic_string<detail::get_char_type_t<std::decay_t<T>>>> const&
-        value,
-    F&& f) {
-  using CharT = detail::get_char_type_t<std::decay_t<T>>;
-  auto var_view = std::basic_string_view<CharT>(std::forward<T>(var));
-  detail::scoped_env env(var_view, value);
+template <typename T, typename F>
+  requires std::is_invocable_v<F> && detail::string_like_type<T>
+inline void with_env(T&& var,
+                     std::optional<detail::to_string_t<T>> const& value,
+                     F&& f) {
+  detail::scoped_env env(detail::to_string_view_t<T>(std::forward<T>(var)),
+                         value);
   std::forward<F>(f)();
 }
 
