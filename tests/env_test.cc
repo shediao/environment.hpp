@@ -243,3 +243,49 @@ TEST(EnvironmentTest, PathEmptyPath) {
     ASSERT_TRUE(paths.empty());
   });
 }
+
+// =============================================================================
+// get() / unset() edge-case tests
+// =============================================================================
+
+TEST(EnvironmentTest, GetNonexistentReturnsNullopt) {
+  // A variable that almost certainly does not exist.
+  constexpr char key[] = "ENV_TEST_NONEXISTENT_12345_XYZ";
+  env::unset(key);  // ensure it's gone
+  auto result = env::get(key);
+  ASSERT_FALSE(result.has_value())
+      << "get() should return nullopt for non-existent variable";
+}
+
+TEST(EnvironmentTest, GetEmptyVariableReturnsEmptyString) {
+  auto [key, value] = MK_ENV();
+  env::set(key, "");  // set to empty
+  auto result = env::get(key);
+  ASSERT_TRUE(result.has_value())
+      << "get() should return a value for an existing (but empty) variable";
+  ASSERT_TRUE(result.value().empty())
+      << "value should be empty, got: '" << result.value() << "'";
+  env::unset(key);
+}
+
+TEST(EnvironmentTest, UnsetNullPointerReturnsFalse) {
+  const char* null_ptr = nullptr;
+  ASSERT_FALSE(env::unset(null_ptr));
+}
+
+TEST(EnvironmentTest, UnsetStringLiteral) {
+  auto [key, value] = MK_ENV();
+  env::set(key, value);
+  ASSERT_TRUE(env::get(key).has_value());
+  env::unset(key.c_str());  // call with C-string literal-like pointer
+  ASSERT_FALSE(env::get(key).has_value());
+}
+
+TEST(EnvironmentTest, SetAndGetCString) {
+  auto [key, value] = MK_ENV();
+  ASSERT_TRUE(env::set(key.c_str(), value.c_str()));
+  auto result = env::get(key.c_str());
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result.value(), value);
+  env::unset(key);
+}

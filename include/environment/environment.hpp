@@ -121,74 +121,74 @@ std::vector<std::basic_string<CharT>> split(std::basic_string<CharT> const& str,
 }
 #if defined(_WIN32)
 // Helper function to convert a UTF-8 std::string to a UTF-16 std::wstring
-inline std::wstring to_wstring(const std::string& utf8str,
+inline std::wstring to_wstring(const std::string_view utf8str,
                                const UINT from_codepage = CP_UTF8) {
   if (utf8str.empty()) {
     return {};
   }
-  int size_needed = MultiByteToWideChar(from_codepage, 0, &utf8str[0],
+  int size_needed = MultiByteToWideChar(from_codepage, 0, utf8str.data(),
                                         (int)utf8str.size(), NULL, 0);
   if (size_needed <= 0) {
     // Consider throwing an exception for conversion errors
     return {};
   }
   std::wstring utf16str(size_needed, 0);
-  MultiByteToWideChar(from_codepage, 0, &utf8str[0], (int)utf8str.size(),
+  MultiByteToWideChar(from_codepage, 0, utf8str.data(), (int)utf8str.size(),
                       &utf16str[0], size_needed);
   return utf16str;
 }
 
 // Helper function to convert a UTF-16 std::wstring to a UTF-8 std::string
-inline std::string to_string(const std::wstring& utf16str,
+inline std::string to_string(const std::wstring_view utf16str,
                              const UINT to_codepage = CP_UTF8) {
   if (utf16str.empty()) {
     return {};
   }
-  int size_needed = WideCharToMultiByte(
-      to_codepage, 0, &utf16str[0], (int)utf16str.size(), NULL, 0, NULL, NULL);
+  int size_needed =
+      WideCharToMultiByte(to_codepage, 0, utf16str.data(), (int)utf16str.size(),
+                          NULL, 0, NULL, NULL);
   if (size_needed <= 0) {
     // Consider throwing an exception for conversion errors
     return {};
   }
   std::string utf8str(size_needed, 0);
-  WideCharToMultiByte(to_codepage, 0, &utf16str[0], (int)utf16str.size(),
+  WideCharToMultiByte(to_codepage, 0, utf16str.data(), (int)utf16str.size(),
                       &utf8str[0], size_needed, NULL, NULL);
   return utf8str;
 }
 
 template <typename CharT>
 std::optional<std::basic_string<CharT>> get(
-    std::basic_string<CharT> const& name) {
-  DWORD size = 0;
+    std::basic_string_view<CharT> name) {
   if constexpr (std::is_same_v<char, CharT>) {
-    size =
-        GetEnvironmentVariableW(detail::to_wstring(name).c_str(), nullptr, 0);
-  } else {
-    size = GetEnvironmentVariableW(name.c_str(), nullptr, 0);
-  }
-  if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-    return std::nullopt;
-  }
-  std::vector<wchar_t> value(size);
-
-  if constexpr (std::is_same_v<char, CharT>) {
-    GetEnvironmentVariableW(detail::to_wstring(name).c_str(), value.data(),
-                            size);
-  } else {
-    GetEnvironmentVariableW(name.c_str(), value.data(), size);
-  }
-  std::wstring ret{value.data()};
-
-  if constexpr (std::is_same_v<char, CharT>) {
+    std::wstring const wname = detail::to_wstring(name);
+    DWORD const size =
+        GetEnvironmentVariableW(wname.c_str(), nullptr, 0);
+    if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+      return std::nullopt;
+    }
+    std::wstring ret(size, L'\0');
+    DWORD const copied =
+        GetEnvironmentVariableW(wname.c_str(), ret.data(), size);
+    ret.resize(copied);
     return detail::to_string(ret);
   } else {
+    DWORD const size =
+        GetEnvironmentVariableW(name.data(), nullptr, 0);
+    if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
+      return std::nullopt;
+    }
+    std::wstring ret(size, L'\0');
+    DWORD const copied =
+        GetEnvironmentVariableW(name.data(), ret.data(), size);
+    ret.resize(copied);
     return ret;
   }
 }
 
 template <typename CharT>
-bool set(std::basic_string<CharT> const& name,
-         std::basic_string<CharT> const& value, bool overwrite = true) {
+bool set(std::basic_string_view<CharT> const& name,
+         std::basic_string_view<CharT> const& value, bool overwrite = true) {
   if (name.empty()) {
     return false;
   }
@@ -196,62 +196,58 @@ bool set(std::basic_string<CharT> const& name,
     DWORD size = 0;
     if constexpr (std::is_same_v<char, CharT>) {
       size =
-          GetEnvironmentVariableW(detail::to_wstring(name).c_str(), nullptr, 0);
+          GetEnvironmentVariableW(detail::to_wstring(name).data(), nullptr, 0);
     } else {
-      size = GetEnvironmentVariableW(name.c_str(), nullptr, 0);
+      size = GetEnvironmentVariableW(name.data(), nullptr, 0);
     }
     if (size != 0 || GetLastError() != ERROR_ENVVAR_NOT_FOUND) {
       return true;
     }
   }
   if constexpr (std::is_same_v<char, CharT>) {
-    return SetEnvironmentVariableW(detail::to_wstring(name).c_str(),
-                                   detail::to_wstring(value).c_str());
+    return SetEnvironmentVariableW(detail::to_wstring(name).data(),
+                                   detail::to_wstring(value).data());
   } else {
-    return SetEnvironmentVariableW(name.c_str(), value.c_str());
+    return SetEnvironmentVariableW(name.data(), value.data());
   }
 }
 
 template <typename CharT>
-bool unset(std::basic_string<CharT> const& name) {
+bool unset(std::basic_string_view<CharT> const& name) {
   if (name.empty()) {
     return false;
   }
   if constexpr (std::is_same_v<char, CharT>) {
-    return SetEnvironmentVariableW(detail::to_wstring(name).c_str(), nullptr);
+    return SetEnvironmentVariableW(detail::to_wstring(name).data(), nullptr);
   } else {
-    return SetEnvironmentVariableW(name.c_str(), nullptr);
+    return SetEnvironmentVariableW(name.data(), nullptr);
   }
 }
 
 template <typename CharT>
-std::basic_string<CharT> expand(std::basic_string<CharT> const& str) {
+std::basic_string<CharT> expand(std::basic_string_view<CharT> str) {
   if (str.empty()) {
     return {};
   }
   DWORD size = 0;
   if constexpr (std::is_same_v<char, CharT>) {
     size =
-        ExpandEnvironmentStringsW(detail::to_wstring(str).c_str(), nullptr, 0);
-  } else {
-    size = ExpandEnvironmentStringsW(str.c_str(), nullptr, 0);
-  }
-  if (size == 0) {
-    return str;
-  }
-
-  std::vector<wchar_t> value(size);
-  if constexpr (std::is_same_v<char, CharT>) {
-    ExpandEnvironmentStringsW(detail::to_wstring(str).c_str(), value.data(),
-                              size);
-  } else {
-    ExpandEnvironmentStringsW(str.c_str(), value.data(), size);
-  }
-  std::wstring ret{value.data()};
-
-  if constexpr (std::is_same_v<char, CharT>) {
+        ExpandEnvironmentStringsW(detail::to_wstring(str).data(), nullptr, 0);
+    if (size == 0) {
+      return std::basic_string<CharT>(str);
+    }
+    std::wstring ret(static_cast<size_t>(size), L'\0');
+    ExpandEnvironmentStringsW(detail::to_wstring(str).data(), ret.data(), size);
+    ret.pop_back();
     return detail::to_string(ret);
   } else {
+    size = ExpandEnvironmentStringsW(str.data(), nullptr, 0);
+    if (size == 0) {
+      return std::basic_string<CharT>(str);
+    }
+    std::wstring ret(static_cast<size_t>(size), L'\0');
+    ExpandEnvironmentStringsW(str.data(), ret.data(), size);
+    ret.pop_back();
     return ret;
   }
 }
@@ -289,30 +285,30 @@ inline void all(
   FreeEnvironmentStringsW(envBlock);
 }
 #else   // !_WIN32
-inline std::optional<std::string> get(std::string const& name) {
-  auto* env = ::getenv(name.c_str());
+inline std::optional<std::string> get(std::string_view name) {
+  auto* env = ::getenv(name.data());
   if (env) {
     return std::string(env);
   }
   return std::nullopt;
 }
 
-inline bool set(std::string const& name, std::string const& value,
+inline bool set(std::string_view name, std::string_view value,
                 bool overwrite = true) {
   if (name.empty()) {
     return false;
   }
-  if (::setenv(name.c_str(), value.c_str(), overwrite ? 1 : 0) != 0) {
+  if (::setenv(name.data(), value.data(), overwrite ? 1 : 0) != 0) {
     return false;
   }
   return true;
 }
 
-inline bool unset(std::string const& name) {
+inline bool unset(std::string_view name) {
   if (name.empty()) {
     return false;
   }
-  return ::unsetenv(name.c_str()) == 0;
+  return ::unsetenv(name.data()) == 0;
 }
 inline void all(std::map<std::string, std::string>& envs) {
   envs.clear();
@@ -337,39 +333,30 @@ template <detail::string_like_type T>
 inline std::optional<
     std::basic_string<detail::get_char_type_t<std::decay_t<T>>>>
 get(T&& name) {
-  if constexpr (detail::cstr_like_type<T>) {
-    return detail::get(
-        std::basic_string<detail::get_char_type_t<std::decay_t<T>>>(name));
-  } else {
-    return detail::get(std::forward<T>(name));
-  }
+  using CharT = detail::get_char_type_t<std::decay_t<T>>;
+  auto name_view = std::basic_string_view<CharT>(std::forward<T>(name));
+  return detail::get(name_view);
 }
 
 template <detail::string_like_type K, detail::string_like_type V>
 inline bool set(K&& name, V&& value, bool overwrite = true) {
   auto name_view =
-      std::basic_string<detail::get_char_type_t<std::decay_t<K>>>(name);
+      std::basic_string_view<detail::get_char_type_t<std::decay_t<K>>>(name);
   auto value_view =
-      std::basic_string<detail::get_char_type_t<std::decay_t<V>>>(value);
+      std::basic_string_view<detail::get_char_type_t<std::decay_t<V>>>(value);
   return detail::set(name_view, value_view, overwrite);
 }
 
 template <detail::string_like_type T>
 inline bool unset(T&& name) {
-  if constexpr (detail::cstr_like_type<T>) {
-    if constexpr (std::is_pointer_v<std::remove_reference_t<T>>) {
-      if (name == nullptr) {
-        return false;
-      }
-    }
-    return detail::unset(
-        std::basic_string<detail::get_char_type_t<std::decay_t<T>>>(name));
-  } else {
-    if (name.empty()) {
+  if constexpr (std::is_pointer_v<std::remove_reference_t<T>>) {
+    if (name == nullptr) {
       return false;
     }
-    return detail::unset(std::forward<T>(name));
   }
+  auto name_view =
+      std::basic_string_view<detail::get_char_type_t<std::decay_t<T>>>(name);
+  return detail::unset(name_view);
 }
 
 inline std::vector<std::string> path() {
@@ -402,7 +389,7 @@ template <detail::string_like_type T>
 inline std::basic_string<detail::get_char_type_t<std::decay_t<T>>> expand(
     T&& name) {
   auto name_view =
-      std::basic_string<detail::get_char_type_t<std::decay_t<T>>>(name);
+      std::basic_string_view<detail::get_char_type_t<std::decay_t<T>>>(name);
   return detail::expand(name_view);
 }
 
