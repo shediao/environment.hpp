@@ -116,7 +116,7 @@ TEST(EnvironmentTest, WithEnv) {
 
   env::set(wkey, wvalue);
   ASSERT_TRUE(env::get(wkey));
-  env::with_env(wkey, std::nullopt, []() { ASSERT_FALSE(env::get(wkey)); });
+  env::with_env(wkey, std::nullopt, [&]() { ASSERT_FALSE(env::get(wkey)); });
   ASSERT_TRUE(env::get(wkey));
   env::unset(wkey);
 #endif
