@@ -162,8 +162,7 @@ std::optional<std::basic_string<CharT>> get(
     std::basic_string_view<CharT> name) {
   if constexpr (std::is_same_v<char, CharT>) {
     std::wstring const wname = detail::to_wstring(name);
-    DWORD const size =
-        GetEnvironmentVariableW(wname.c_str(), nullptr, 0);
+    DWORD const size = GetEnvironmentVariableW(wname.c_str(), nullptr, 0);
     if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
       return std::nullopt;
     }
@@ -173,14 +172,12 @@ std::optional<std::basic_string<CharT>> get(
     ret.resize(copied);
     return detail::to_string(ret);
   } else {
-    DWORD const size =
-        GetEnvironmentVariableW(name.data(), nullptr, 0);
+    DWORD const size = GetEnvironmentVariableW(name.data(), nullptr, 0);
     if (size == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
       return std::nullopt;
     }
     std::wstring ret(size, L'\0');
-    DWORD const copied =
-        GetEnvironmentVariableW(name.data(), ret.data(), size);
+    DWORD const copied = GetEnvironmentVariableW(name.data(), ret.data(), size);
     ret.resize(copied);
     return ret;
   }
@@ -404,9 +401,10 @@ namespace detail {
 template <typename CharT>
 class scoped_env {
   using string_type = std::basic_string<CharT>;
+  using string_view_type = std::basic_string_view<CharT>;
 
  public:
-  scoped_env(string_type const& var, std::optional<string_type> const& value)
+  scoped_env(string_view_type var, std::optional<string_type> const& value)
       : var_(var) {
     if (auto v = env::get(var); v.has_value()) {
       original_value_.emplace(v.value());
@@ -431,22 +429,19 @@ class scoped_env {
 };
 }  // namespace detail
 
-template <typename F>
+template <typename F, typename T>
   requires std::is_invocable_v<F>
-inline void with_env(std::string const& var,
-                     std::optional<std::string> const& value, F&& f) {
-  detail::scoped_env env(var, value);
+inline void with_env(
+    T&& var,
+    std::optional<
+        std::basic_string<detail::get_char_type_t<std::decay_t<T>>>> const&
+        value,
+    F&& f) {
+  using CharT = detail::get_char_type_t<std::decay_t<T>>;
+  auto var_view = std::basic_string_view<CharT>(std::forward<T>(var));
+  detail::scoped_env env(var_view, value);
   std::forward<F>(f)();
 }
-#if defined(_WIN32)
-template <typename F>
-  requires std::is_invocable_v<F>
-inline void with_env(std::wstring const& var,
-                     std::optional<std::wstring> const& value, F&& f) {
-  detail::scoped_env env(var, value);
-  std::forward<F>(f)();
-}
-#endif
 
 }  // namespace env
 
