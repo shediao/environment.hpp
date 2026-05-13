@@ -357,8 +357,10 @@ inline bool set(K&& name, V&& value, bool overwrite = true) {
 template <detail::string_like_type T>
 inline bool unset(T&& name) {
   if constexpr (detail::cstr_like_type<T>) {
-    if (name == nullptr) {
-      return false;
+    if constexpr (std::is_pointer_v<std::decay_t<T>>) {
+      if (name == nullptr) {
+        return false;
+      }
     }
     return detail::unset(
         std::basic_string<detail::get_char_type_t<std::decay_t<T>>>(name));
