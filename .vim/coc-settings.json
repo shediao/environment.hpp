@@ -14,12 +14,9 @@
     "-j=8"
   ],
   "clangd.compilationDatabaseCandidates": [
-    "${workspaceFolder}/build",
-    "${workspaceFolder}/cmake-build-debug",
-    "${workspaceFolder}/cmake-build-release",
+    "${workspaceFolder}",
     "${workspaceFolder}/build/Debug",
-    "${workspaceFolder}/build/Release",
-    "${workspaceFolder}"
+    "${workspaceFolder}/build/Release"
   ],
   "clangd.path": "clangd"
 }

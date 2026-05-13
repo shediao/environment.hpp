@@ -28,7 +28,7 @@ TEST(TestEnv, Unicode) {
 TEST(TestEnv, Unicode2) {
   ASSERT_FALSE(env::all().empty());
 #if defined(_WIN32)
-  ASSERT_FALSE(env::all<std::wstring>().empty());
+  ASSERT_FALSE(env::allw().empty());
 #endif
 }
 
@@ -87,7 +87,7 @@ TEST(TestEnv, EnvironmentsWithUnicode) {
   // The environs() function returns upper-cased keys.
   std::transform(wkey.begin(), wkey.end(), wkey.begin(), ::towupper);
 
-  auto envs_w = env::all<std::wstring>();
+  auto envs_w = env::allw();
   auto it_w = envs_w.find(wkey);
   ASSERT_NE(it_w, envs_w.end());
   ASSERT_EQ(it_w->second, L"Hello World From Unicode");
@@ -101,7 +101,7 @@ TEST(TestEnv, EnvironmentsWithUnicode) {
   auto key_ascii = "ASCII_KEY_你好";
   auto value_unicode = "Unicode_Value_你好_Привіт";
   ASSERT_TRUE(env::set(key_ascii, value_unicode));
-  auto envs_s = env::all<std::string>();
+  auto envs_s = env::all();
 
   // transform key_ascii to upper case
   std::string upper_key_ascii = key_ascii;

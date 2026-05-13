@@ -36,6 +36,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #if defined(_WIN32)
@@ -52,6 +53,72 @@ extern char** environ;
 namespace env {
 
 namespace detail {
+
+template <typename T>
+concept string_like_type =
+#if defined(_WIN32)
+    std::same_as<wchar_t*, std::decay_t<T>> ||
+    std::same_as<const wchar_t*, std::decay_t<T>> ||
+    std::same_as<std::wstring, std::decay_t<T>> ||
+    std::same_as<std::wstring_view, std::decay_t<T>> ||
+#endif
+    std::same_as<char*, std::decay_t<T>> ||
+    std::same_as<const char*, std::decay_t<T>> ||
+    std::same_as<std::string, std::decay_t<T>> ||
+    std::same_as<std::string_view, std::decay_t<T>>;
+
+template <typename T>
+concept cstr_like_type =
+#if defined(_WIN32)
+    std::same_as<wchar_t*, std::decay_t<T>> ||
+    std::same_as<const wchar_t*, std::decay_t<T>> ||
+#endif
+    std::same_as<char*, std::decay_t<T>> ||
+    std::same_as<const char*, std::decay_t<T>>;
+
+template <typename T>
+struct get_char_type;
+
+template <typename CharT>
+struct get_char_type<std::basic_string<CharT>> {
+  using type = CharT;
+};
+template <typename CharT>
+struct get_char_type<std::basic_string_view<CharT>> {
+  using type = CharT;
+};
+template <typename CharT>
+struct get_char_type<CharT*> {
+  using type = std::remove_cv_t<CharT>;
+};
+
+template <typename T>
+using get_char_type_t = typename get_char_type<T>::type;
+
+template <typename CharT>
+std::vector<std::basic_string<CharT>> split(std::basic_string<CharT> const& str,
+                                            CharT del) {
+  std::vector<std::basic_string<CharT>> ret;
+  if (str.empty()) {
+    return ret;
+  }
+
+  std::size_t start = 0;
+  std::size_t pos = 0;
+
+  while ((pos = str.find(del, start)) != std::basic_string<CharT>::npos) {
+    if (pos != start) {
+      ret.emplace_back(str.substr(start, pos - start));
+    }
+    start = pos + 1;
+  }
+  // Don't forget the last segment after the final delimiter
+  if (start != str.size()) {
+    ret.emplace_back(str.substr(start));
+  }
+
+  return ret;
+}
 #if defined(_WIN32)
 // Helper function to convert a UTF-8 std::string to a UTF-16 std::wstring
 inline std::wstring to_wstring(const std::string& utf8str,
@@ -188,34 +255,40 @@ std::basic_string<CharT> expand(std::basic_string<CharT> const& str) {
     return ret;
   }
 }
-#endif  // _WIN32
 template <typename CharT>
-std::vector<std::basic_string<CharT>> split(std::basic_string<CharT> const& str,
-                                            CharT del) {
-  std::vector<std::basic_string<CharT>> ret;
-  if (str.empty()) {
-    return ret;
+inline void all(
+    std::map<std::basic_string<CharT>, std::basic_string<CharT>>& envs) {
+  envs.clear();
+  wchar_t* envBlock = GetEnvironmentStringsW();
+  if (envBlock == nullptr) {
+    return;
   }
 
-  std::size_t start = 0;
-  std::size_t pos = 0;
-
-  while ((pos = str.find(del, start)) != std::basic_string<CharT>::npos) {
-    if (pos != start) {
-      ret.emplace_back(str.substr(start, pos - start));
+  wchar_t* currentEnv = envBlock;
+  while (*currentEnv != L'\0') {
+    std::wstring_view envString(currentEnv);
+    auto pos = envString.find(L'=');
+    if (pos == 0) {
+      pos = envString.find(L'=', 1);
     }
-    start = pos + 1;
-  }
-  // Don't forget the last segment after the final delimiter
-  if (start != str.size()) {
-    ret.emplace_back(str.substr(start));
+    if (pos != std::wstring_view::npos) {
+      auto key = std::wstring(envString.substr(0, pos));
+      auto value = std::wstring(envString.substr(pos + 1));
+      std::transform(key.begin(), key.end(), key.begin(),
+                     [](wchar_t c) { return std::toupper(c, std::locale()); });
+      if constexpr (std::is_same_v<char, CharT>) {
+        envs[to_string(std::move(key))] = to_string(std::move(value));
+      } else {
+        envs[std::move(key)] = std::move(value);
+      }
+    }
+    currentEnv +=
+        envString.length() + 1;  // Move to the next environment variable
   }
 
-  return ret;
+  FreeEnvironmentStringsW(envBlock);
 }
-}  // namespace detail
-
-#if !defined(_WIN32)
+#else   // !_WIN32
 inline std::optional<std::string> get(std::string const& name) {
   auto* env = ::getenv(name.c_str());
   if (env) {
@@ -241,10 +314,10 @@ inline bool unset(std::string const& name) {
   }
   return ::unsetenv(name.c_str()) == 0;
 }
-inline std::map<std::string, std::string> all() {
-  std::map<std::string, std::string> envs;
+inline void all(std::map<std::string, std::string>& envs) {
+  envs.clear();
   if (environ == nullptr) {
-    return envs;
+    return;
   }
 
   for (char** env = environ; *env != nullptr; ++env) {
@@ -256,102 +329,88 @@ inline std::map<std::string, std::string> all() {
       envs[std::string(key)] = std::string(value);
     }
   }
-  return envs;
+}
+#endif  // _WIN32
+}  // namespace detail
+
+template <detail::string_like_type T>
+inline std::optional<
+    std::basic_string<detail::get_char_type_t<std::decay_t<T>>>>
+get(T&& name) {
+  if constexpr (detail::cstr_like_type<T>) {
+    return detail::get(
+        std::basic_string<detail::get_char_type_t<std::decay_t<T>>>(name));
+  } else {
+    return detail::get(std::forward<T>(name));
+  }
+}
+
+template <detail::string_like_type K, detail::string_like_type V>
+inline bool set(K&& name, V&& value, bool overwrite = true) {
+  auto name_view =
+      std::basic_string<detail::get_char_type_t<std::decay_t<K>>>(name);
+  auto value_view =
+      std::basic_string<detail::get_char_type_t<std::decay_t<V>>>(value);
+  return detail::set(name_view, value_view, overwrite);
+}
+
+template <detail::string_like_type T>
+inline bool unset(T&& name) {
+  if constexpr (detail::cstr_like_type<T>) {
+    if (name == nullptr) {
+      return false;
+    }
+    return detail::unset(
+        std::basic_string<detail::get_char_type_t<std::decay_t<T>>>(name));
+  } else {
+    if (name.empty()) {
+      return false;
+    }
+    return detail::unset(std::forward<T>(name));
+  }
 }
 
 inline std::vector<std::string> path() {
   auto path = ::env::get("PATH").value_or("");
-  return detail::split(path, ':');
-}
-
-#else   // !_WIN32
-
-inline std::optional<std::string> get(std::string const& name) {
-  return detail::get<char>(name);
-}
-inline std::optional<std::wstring> get(std::wstring const& name) {
-  return detail::get<wchar_t>(name);
-}
-
-inline bool set(std::string const& name, std::string const& value,
-                bool overwrite = true) {
-  return detail::set<char>(name, value, overwrite);
-}
-inline bool set(std::wstring const& name, std::wstring const& value,
-                bool overwrite = true) {
-  return detail::set<wchar_t>(name, value, overwrite);
-}
-
-inline bool unset(std::string const& name) { return detail::unset<char>(name); }
-
-inline bool unset(std::wstring const& name) {
-  return detail::unset<wchar_t>(name);
-}
-
-inline std::string expand(std::string const& name) {
-  return detail::expand<char>(name);
-}
-
-inline std::wstring expand(std::wstring const& name) {
-  return detail::expand<wchar_t>(name);
-}
-
-template <typename StringType = std::wstring>
-std::map<StringType, StringType> all();
-template <>
-inline std::map<std::wstring, std::wstring> all<std::wstring>() {
-  std::map<std::wstring, std::wstring> envs;
-  wchar_t* envBlock = GetEnvironmentStringsW();
-  if (envBlock == nullptr) {
-    return envs;
-  }
-
-  wchar_t* currentEnv = envBlock;
-  while (*currentEnv != L'\0') {
-    std::wstring_view envString(currentEnv);
-    auto pos = envString.find(L'=');
-    if (pos == 0) {
-      pos = envString.find(L'=', 1);
-    }
-    if (pos != std::wstring_view::npos) {
-      auto key = std::wstring(envString.substr(0, pos));
-      auto value = std::wstring(envString.substr(pos + 1));
-      std::transform(key.begin(), key.end(), key.begin(),
-                     [](wchar_t c) { return std::toupper(c, std::locale()); });
-      envs[std::move(key)] = std::move(value);
-    }
-    currentEnv +=
-        envString.length() + 1;  // Move to the next environment variable
-  }
-
-  FreeEnvironmentStringsW(envBlock);
-  return envs;
-}
-template <>
-inline std::map<std::string, std::string> all<std::string>() {
-  std::map<std::string, std::string> envs;
-  for (auto const& [key, val] : all<std::wstring>()) {
-    envs[detail::to_string(key)] = detail::to_string(val);
-  }
-  return envs;
-}
-inline std::map<std::string, std::string> allutf8() {
-  return all<std::string>();
-}
-inline std::map<std::wstring, std::wstring> allutf16() {
-  return all<std::wstring>();
-}
-
-inline std::vector<std::string> path() {
-  auto path = ::env::get("PATH").value_or("");
+#if defined(_WIN32)
   return detail::split(path, ';');
+#else
+  return detail::split(path, ':');
+#endif
 }
+
+#if !defined(_WIN32)
+inline std::map<std::string, std::string> all() {
+  std::map<std::string, std::string> envs;
+  detail::all(envs);
+  return envs;
+}
+#else   // !_WIN32
+inline std::map<std::string, std::string> all() {
+  std::map<std::string, std::string> envs;
+  detail::all(envs);
+  return envs;
+}
+inline std::map<std::wstring, std::wstring> allw() {
+  std::map<std::wstring, std::wstring> envs;
+  detail::all(envs);
+  return envs;
+}
+template <detail::string_like_type T>
+inline std::basic_string<detail::get_char_type_t<std::decay_t<T>>> expand(
+    T&& name) {
+  auto name_view =
+      std::basic_string<detail::get_char_type_t<std::decay_t<T>>>(name);
+  return detail::expand(name_view);
+}
+
 inline std::vector<std::wstring> pathw() {
   auto path = ::env::get(L"PATH").value_or(L"");
   return detail::split(path, L';');
 }
 #endif  // _WIN32
 
+namespace detail {
 // RAII helper to set and restore an environment variable.
 template <typename CharT>
 class scoped_env {
@@ -381,12 +440,13 @@ class scoped_env {
   const string_type var_;
   std::optional<string_type> original_value_;
 };
+}  // namespace detail
 
 template <typename F>
   requires std::is_invocable_v<F>
 inline void with_env(std::string const& var,
                      std::optional<std::string> const& value, F&& f) {
-  scoped_env env(var, value);
+  detail::scoped_env env(var, value);
   std::forward<F>(f)();
 }
 #if defined(_WIN32)
@@ -394,7 +454,7 @@ template <typename F>
   requires std::is_invocable_v<F>
 inline void with_env(std::wstring const& var,
                      std::optional<std::wstring> const& value, F&& f) {
-  scoped_env env(var, value);
+  detail::scoped_env env(var, value);
   std::forward<F>(f)();
 }
 #endif
