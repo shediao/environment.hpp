@@ -353,37 +353,27 @@ inline std::vector<std::wstring> pathw() {
 #endif  // _WIN32
 
 // RAII helper to set and restore an environment variable.
-class with_env {
-#if defined(_WIN32)
-  using string_type = std::wstring;
-#else
-  using string_type = std::string;
-#endif
+template <typename CharT>
+class scoped_env {
+  using string_type = std::basic_string<CharT>;
+
  public:
-  with_env(string_type const& var, std::optional<string_type> const& value)
+  scoped_env(string_type const& var, std::optional<string_type> const& value)
       : var_(var) {
-    if (auto v = get(var); v.has_value()) {
+    if (auto v = env::get(var); v.has_value()) {
       original_value_.emplace(v.value());
     }
     if (value) {
-      set(var, value.value(), true);
+      env::set(var, value.value(), true);
     } else {
-      unset(var);
+      env::unset(var);
     }
   }
-#if defined(_WIN32)
-  with_env(std::string const& var, std::optional<std::string> const& value)
-      : with_env(
-            detail::to_wstring(var),
-            value
-                ? std::optional<string_type>{detail::to_wstring(value.value())}
-                : std::nullopt) {}
-#endif
-  ~with_env() {
+  ~scoped_env() {
     if (original_value_) {
-      set(var_, original_value_->c_str(), 1);
+      env::set(var_, original_value_->c_str(), 1);
     } else {
-      unset(var_);
+      env::unset(var_);
     }
   }
 
@@ -391,6 +381,23 @@ class with_env {
   const string_type var_;
   std::optional<string_type> original_value_;
 };
+
+template <typename F>
+  requires std::is_invocable_v<F>
+inline void with_env(std::string const& var,
+                     std::optional<std::string> const& value, F&& f) {
+  scoped_env env(var, value);
+  std::forward<F>(f)();
+}
+#if defined(_WIN32)
+template <typename F>
+  requires std::is_invocable_v<F>
+inline void with_env(std::wstring const& var,
+                     std::optional<std::wstring> const& value, F&& f) {
+  scoped_env env(var, value);
+  std::forward<F>(f)();
+}
+#endif
 
 }  // namespace env
 

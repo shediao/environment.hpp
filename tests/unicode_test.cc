@@ -122,21 +122,19 @@ TEST(TestEnv, WithEnv) {
   using env::with_env;
   constexpr char key[] = "TEST_WITH_ENV_RAII_你好_Привіт_こんにちは_😊";
   constexpr char value[] = "123";
-  {
-    ASSERT_FALSE(env::get(key));
-    with_env e(key, value);
+  ASSERT_FALSE(env::get(key));
+  env::with_env(key, value, [&]() {
     ASSERT_TRUE(env::get(key));
     ASSERT_EQ(env::get(key).value(), value);
-  }
+  });
   ASSERT_FALSE(env::get(key));
 #if defined(_WIN32)
   constexpr wchar_t wkey[] = L"TEST_WITH_ENV_RAII_你好_Привіт_こんにちは_😊";
   constexpr wchar_t wvalue[] = L"123";
-  {
-    with_env e(wkey, wvalue);
+  env::with_env(wkey, wvalue, [&]() {
     ASSERT_TRUE(env::get(wkey));
     ASSERT_EQ(env::get(wkey).value(), wvalue);
-  }
+  });
   ASSERT_FALSE(env::get(wkey));
 #endif
 }

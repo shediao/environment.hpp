@@ -90,42 +90,33 @@ TEST(EnvironmentTest, ExpandTest) {
 #endif
 
 TEST(EnvironmentTest, WithEnv) {
-  using env::with_env;
   constexpr char key[] = "TEST_WITH_ENV_RAII";
   constexpr char value[] = "123";
-  {
-    ASSERT_FALSE(env::get(key));
-    with_env e(key, value);
+  ASSERT_FALSE(env::get(key));
+  env::with_env(key, value, [&]() {
     ASSERT_TRUE(env::get(key));
     ASSERT_EQ(env::get(key).value(), value);
-  }
+  });
   ASSERT_FALSE(env::get(key));
 
   env::set(key, value);
-  {
-    ASSERT_TRUE(env::get(key));
-    with_env e(key, std::nullopt);
-    ASSERT_FALSE(env::get(key));
-  }
+  ASSERT_TRUE(env::get(key));
+  env::with_env(key, std::nullopt, [&]() { ASSERT_FALSE(env::get(key)); });
   ASSERT_TRUE(env::get(key));
   env::unset(key);
 
 #if defined(_WIN32)
   constexpr wchar_t wkey[] = L"TEST_WITH_ENV_RAII";
   constexpr wchar_t wvalue[] = L"123";
-  {
-    with_env e(wkey, wvalue);
+  env::with_env(wkey, wvalue, [&]() {
     ASSERT_TRUE(env::get(wkey));
     ASSERT_EQ(env::get(wkey).value(), wvalue);
-  }
+  });
   ASSERT_FALSE(env::get(wkey));
 
   env::set(wkey, wvalue);
-  {
-    ASSERT_TRUE(env::get(wkey));
-    with_env e(wkey, std::nullopt);
-    ASSERT_FALSE(env::get(wkey));
-  }
+  ASSERT_TRUE(env::get(wkey));
+  env::with_env(wkey, std::nullopt, []() { ASSERT_FALSE(env::get(wkey)); });
   ASSERT_TRUE(env::get(wkey));
   env::unset(wkey);
 #endif
@@ -181,7 +172,6 @@ TEST(EnvironmentTest, PathReconstructFromGet) {
 }
 
 TEST(EnvironmentTest, PathWithCustomValue) {
-  using env::with_env;
   constexpr char key[] = "PATH";
 
 #if defined(_WIN32)
@@ -192,10 +182,8 @@ TEST(EnvironmentTest, PathWithCustomValue) {
   constexpr char sep = ':';
 #endif
 
-  {
-    with_env e(key, custom_path);
+  env::with_env(key, custom_path, [&]() {
     auto paths = env::path();
-
     // Reconstruct and verify
     std::string reconstructed;
     for (std::size_t i = 0; i < paths.size(); ++i) {
@@ -205,11 +193,10 @@ TEST(EnvironmentTest, PathWithCustomValue) {
       reconstructed += paths[i];
     }
     ASSERT_EQ(reconstructed, custom_path);
-  }
+  });
 }
 
 TEST(EnvironmentTest, PathSingleElement) {
-  using env::with_env;
   constexpr char key[] = "PATH";
 
 #if defined(_WIN32)
@@ -218,47 +205,41 @@ TEST(EnvironmentTest, PathSingleElement) {
   constexpr char custom_path[] = "/only/this/dir";
 #endif
 
-  {
-    with_env e(key, custom_path);
+  env::with_env(key, custom_path, [&]() {
     auto paths = env::path();
     ASSERT_EQ(paths.size(), 1);
     ASSERT_EQ(paths[0], custom_path);
-  }
+  });
 }
 
 TEST(EnvironmentTest, PathWithConsecutiveSeparators) {
-  using env::with_env;
   constexpr char key[] = "PATH";
 
   // detail::split skips empty elements caused by consecutive delimiters,
   // and also skips the trailing empty element if the string ends with the
   // delimiter.
 #if defined(_WIN32)
-  {
-    with_env e(key, "C:\\a;;C:\\b;");
+  env::with_env(key, "C:\\a;;C:\\b;", []() {
     auto paths = env::path();
     ASSERT_EQ(paths.size(), 2);
     ASSERT_EQ(paths[0], "C:\\a");
     ASSERT_EQ(paths[1], "C:\\b");
-  }
+  });
 #else
-  {
-    with_env e(key, "/usr/bin::/bin:");
+  env::with_env(key, "/usr/bin::/bin:", []() {
     auto paths = env::path();
     ASSERT_EQ(paths.size(), 2);
     ASSERT_EQ(paths[0], "/usr/bin");
     ASSERT_EQ(paths[1], "/bin");
-  }
+  });
 #endif
 }
 
 TEST(EnvironmentTest, PathEmptyPath) {
-  using env::with_env;
   constexpr char key[] = "PATH";
 
-  {
-    with_env e(key, "");
+  env::with_env(key, "", []() {
     auto paths = env::path();
     ASSERT_TRUE(paths.empty());
-  }
+  });
 }
