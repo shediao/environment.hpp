@@ -404,28 +404,36 @@ class scoped_env {
   using string_view_type = std::basic_string_view<CharT>;
 
  public:
-  scoped_env(string_view_type var, std::optional<string_type> const& value)
-      : var_(var) {
-    if (auto v = env::get(var); v.has_value()) {
-      original_value_.emplace(v.value());
-    }
-    if (value) {
-      env::set(var, value.value(), true);
-    } else {
-      env::unset(var);
+  scoped_env(std::map<string_type, std::optional<string_type>> envs)
+      : envs_(std::move(envs)) {
+    for (const auto& [var, value] : envs_) {
+      if (auto v = env::get(var); v.has_value()) {
+        original_envs_[var] = v.value();
+      }
+      if (value) {
+        env::set(var, value.value(), true);
+      } else {
+        env::unset(var);
+      }
     }
   }
+  scoped_env(string_type var, std::optional<string_type> value)
+      : scoped_env(std::map<string_type, std::optional<string_type>>{
+            {std::move(var), std::move(value)}}) {}
   ~scoped_env() {
-    if (original_value_) {
-      env::set(var_, original_value_->c_str(), 1);
-    } else {
-      env::unset(var_);
+    for (const auto& [var, value] : original_envs_) {
+      env::set(var, value, true);
+    }
+    for (const auto& [var, _] : envs_) {
+      if (original_envs_.find(var) == original_envs_.end()) {
+        env::unset(var);
+      }
     }
   }
 
  private:
-  const string_type var_;
-  std::optional<string_type> original_value_;
+  std::map<string_type, std::optional<string_type>> envs_;
+  std::map<string_type, string_type> original_envs_;
 };
 }  // namespace detail
 
@@ -434,8 +442,17 @@ template <typename T, typename F>
 inline void with_env(T&& var,
                      std::optional<detail::to_string_t<T>> const& value,
                      F&& f) {
-  detail::scoped_env env(detail::to_string_view_t<T>(std::forward<T>(var)),
-                         value);
+  detail::scoped_env env(detail::to_string_t<T>(std::forward<T>(var)), value);
+  std::forward<F>(f)();
+}
+
+template <typename CharT, typename F>
+  requires std::is_invocable_v<F>
+inline void with_env(
+    std::map<std::basic_string<CharT>,
+             std::optional<std::basic_string<CharT>>> const& envs,
+    F&& f) {
+  detail::scoped_env env(envs);
   std::forward<F>(f)();
 }
 

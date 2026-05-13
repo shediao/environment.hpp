@@ -289,3 +289,215 @@ TEST(EnvironmentTest, SetAndGetCString) {
   ASSERT_EQ(result.value(), value);
   env::unset(key);
 }
+
+// =============================================================================
+// scoped_env / with_env multi-variable tests (new map-based overloads)
+// =============================================================================
+
+TEST(EnvironmentTest, WithEnvMultiSet) {
+  // Set multiple new environment variables via map-based with_env.
+  // After the scope, all should be unset.
+  auto [key1, value1] = MK_ENV();
+  auto [key2, value2] = MK_ENV();
+
+  ASSERT_FALSE(env::get(key1));
+  ASSERT_FALSE(env::get(key2));
+
+  env::with_env(
+      std::map<std::string, std::optional<std::string>>{
+          {key1, value1},
+          {key2, value2},
+      },
+      [&]() {
+        ASSERT_TRUE(env::get(key1));
+        ASSERT_EQ(env::get(key1).value(), value1);
+        ASSERT_TRUE(env::get(key2));
+        ASSERT_EQ(env::get(key2).value(), value2);
+      });
+
+  ASSERT_FALSE(env::get(key1));
+  ASSERT_FALSE(env::get(key2));
+}
+
+TEST(EnvironmentTest, WithEnvMultiRestore) {
+  // Pre-set some vars, then modify them inside with_env.
+  // After the scope, original values must be restored.
+  auto [key1, value1] = MK_ENV();
+  auto [key2, value2] = MK_ENV();
+
+  constexpr char new_value1[] = "NEW_VALUE_1";
+  constexpr char new_value2[] = "NEW_VALUE_2";
+
+  env::set(key1, value1);
+  env::set(key2, value2);
+  ASSERT_EQ(env::get(key1).value(), value1);
+  ASSERT_EQ(env::get(key2).value(), value2);
+
+  env::with_env(
+      std::map<std::string, std::optional<std::string>>{
+          {key1, new_value1},
+          {key2, new_value2},
+      },
+      [&]() {
+        ASSERT_EQ(env::get(key1).value(), new_value1);
+        ASSERT_EQ(env::get(key2).value(), new_value2);
+      });
+
+  // Original values restored.
+  ASSERT_EQ(env::get(key1).value(), value1);
+  ASSERT_EQ(env::get(key2).value(), value2);
+
+  env::unset(key1);
+  env::unset(key2);
+}
+
+TEST(EnvironmentTest, WithEnvMultiMixedSetAndUnset) {
+  // In the map, some entries have values (set) and some are nullopt (unset).
+  auto [key_set, value_set] = MK_ENV();
+  auto [key_unset, value_unset] = MK_ENV();
+
+  // Pre-set both.
+  env::set(key_set, value_set);
+  env::set(key_unset, value_unset);
+  ASSERT_TRUE(env::get(key_set));
+  ASSERT_TRUE(env::get(key_unset));
+
+  env::with_env(
+      std::map<std::string, std::optional<std::string>>{
+          {key_set, std::string("CHANGED_VALUE")},
+          {key_unset, std::nullopt},
+      },
+      [&]() {
+        ASSERT_EQ(env::get(key_set).value(), "CHANGED_VALUE");
+        ASSERT_FALSE(env::get(key_unset))
+            << key_unset << " should be unset inside the scope";
+      });
+
+  // Both restored to originals.
+  ASSERT_EQ(env::get(key_set).value(), value_set);
+  ASSERT_EQ(env::get(key_unset).value(), value_unset);
+
+  env::unset(key_set);
+  env::unset(key_unset);
+}
+
+TEST(EnvironmentTest, WithEnvMultiNewSetAndNewUnset) {
+  // Variables that did NOT exist before: one is set, one is "unset" (nullopt).
+  auto [key_set, value_set] = MK_ENV();
+  auto [key_unset, _] = MK_ENV();
+
+  ASSERT_FALSE(env::get(key_set));
+  ASSERT_FALSE(env::get(key_unset));
+
+  env::with_env(
+      std::map<std::string, std::optional<std::string>>{
+          {key_set, std::string("FRESH_VALUE")},
+          {key_unset, std::nullopt},
+      },
+      [&]() {
+        ASSERT_EQ(env::get(key_set).value(), "FRESH_VALUE");
+        ASSERT_FALSE(env::get(key_unset));
+      });
+
+  // Neither should exist after the scope.
+  ASSERT_FALSE(env::get(key_set));
+  ASSERT_FALSE(env::get(key_unset));
+}
+
+TEST(EnvironmentTest, WithEnvMultiEmptyMap) {
+  // An empty map should be a no-op and not crash.
+  bool called = false;
+  env::with_env(std::map<std::string, std::optional<std::string>>{},
+                [&]() { called = true; });
+  ASSERT_TRUE(called);
+}
+
+TEST(EnvironmentTest, WithEnvMultiSingleVarViaMap) {
+  // The map overload should also work for a single entry.
+  auto [key, value] = MK_ENV();
+  ASSERT_FALSE(env::get(key));
+
+  env::with_env(
+      std::map<std::string, std::optional<std::string>>{
+          {key, value},
+      },
+      [&]() {
+        ASSERT_TRUE(env::get(key));
+        ASSERT_EQ(env::get(key).value(), value);
+      });
+
+  ASSERT_FALSE(env::get(key));
+}
+
+TEST(EnvironmentTest, WithEnvMultiOverwriteExistingWithNullopt) {
+  // Overwrite an existing variable with nullopt inside scope,
+  // verify it's restored afterwards.
+  auto [key, value] = MK_ENV();
+  env::set(key, value);
+  ASSERT_TRUE(env::get(key));
+
+  env::with_env(
+      std::map<std::string, std::optional<std::string>>{
+          {key, std::nullopt},
+      },
+      [&]() { ASSERT_FALSE(env::get(key)); });
+
+  ASSERT_TRUE(env::get(key));
+  ASSERT_EQ(env::get(key).value(), value);
+
+  env::unset(key);
+}
+
+TEST(EnvironmentTest, WithEnvMultiPartialOverlap) {
+  // Mix of vars that exist before and vars that don't.
+  auto [existing_key, existing_value] = MK_ENV();
+  auto [new_key, new_value] = MK_ENV();
+
+  env::set(existing_key, existing_value);
+  ASSERT_TRUE(env::get(existing_key));
+  ASSERT_FALSE(env::get(new_key));
+
+  env::with_env(
+      std::map<std::string, std::optional<std::string>>{
+          {existing_key, std::string("CHANGED")},
+          {new_key, new_value},
+      },
+      [&]() {
+        ASSERT_EQ(env::get(existing_key).value(), "CHANGED");
+        ASSERT_EQ(env::get(new_key).value(), new_value);
+      });
+
+  // Existing var restored, new var unset.
+  ASSERT_EQ(env::get(existing_key).value(), existing_value);
+  ASSERT_FALSE(env::get(new_key));
+
+  env::unset(existing_key);
+}
+
+#if defined(_WIN32)
+TEST(EnvironmentTest, WithEnvMultiWideChars) {
+  // Multi-variable with wstring on Windows.
+  constexpr wchar_t key1[] = L"TEST_WITH_ENV_MULTI_W_1";
+  constexpr wchar_t key2[] = L"TEST_WITH_ENV_MULTI_W_2";
+  constexpr wchar_t value1[] = L"VALUE_1_W";
+  constexpr wchar_t value2[] = L"VALUE_2_W";
+
+  ASSERT_FALSE(env::get(key1));
+  ASSERT_FALSE(env::get(key2));
+
+  env::with_env(
+      std::map<std::wstring, std::optional<std::wstring>>{
+          {key1, value1},
+          {key2, value2},
+      },
+      [&]() {
+        ASSERT_TRUE(env::get(key1));
+        ASSERT_EQ(env::get(key1).value(), value1);
+        ASSERT_TRUE(env::get(key2));
+        ASSERT_EQ(env::get(key2).value(), value2);
+      });
+
+  ASSERT_FALSE(env::get(key1));
+  ASSERT_FALSE(env::get(key2));
+}
+#endif  // _WIN32
