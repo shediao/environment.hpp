@@ -12,7 +12,7 @@
 - **Type-safe**: Uses `std::optional` to handle potentially non-existent environment variables, avoiding the risk of null pointers.
 - **Easy to use**: Provides simple functions to get, set, unset, expand, and iterate over environment variables.
 - **Wide-character support**: Supports both `char` (`std::string`) and `wchar_t` (`std::wstring`) on Windows.
-- **RAII helpers**: `scoped_env` and `with_env` for scoped environment variable changes.
+- **RAII helpers**: `env::with` for scoped environment variable changes (single or multiple variables).
 
 ## How to Use
 
@@ -28,7 +28,7 @@ Copy the `environment` folder from the `include` directory into your project, th
 
 #### Get an Environment Variable
 
-Use `env::get` to retrieve an environment variable. It returns an `std::optional` containing the value if the variable exists, otherwise it returns `std::nullopt`.
+Use `env::get` to retrieve an environment variable. It returns an `std::optional` containing the value if the variable exists, otherwise it returns `std::nullopt`. The function accepts any string-like type (`std::string`, `std::string_view`, `const char*`, etc.).
 
 ```cpp
 #include "environment/environment.hpp"
@@ -55,11 +55,16 @@ env::set("MY_VAR", "my_value");
 // By default, set will overwrite an existing value.
 // To prevent overwriting, set the third argument to false.
 env::set("MY_VAR", "another_value", false); // This will not modify "MY_VAR"
+
+// Works with various string types
+std::string name = "MY_VAR";
+std::string_view value = "hello";
+env::set(name, value);
 ```
 
 #### Unset an Environment Variable
 
-Use `env::unset` to remove an environment variable.
+Use `env::unset` to remove an environment variable. Passing `nullptr` is safe and returns `false`.
 
 ```cpp
 env::unset("MY_VAR");
@@ -67,7 +72,7 @@ env::unset("MY_VAR");
 
 #### Get All Environment Variables
 
-Use `env::all` to get a `std::map` containing all environment variables.
+Use `env::all` to get a `std::map<std::string, std::string>` containing all environment variables. On Windows, use `env::allw` to get them as `std::map<std::wstring, std::wstring>`.
 
 ```cpp
 #include "environment/environment.hpp"
@@ -76,7 +81,7 @@ Use `env::all` to get a `std::map` containing all environment variables.
 #include <string>
 
 int main() {
-    std::map<std::string, std::string> all_vars = env::all();
+    auto all_vars = env::all();
     for (const auto& [key, value] : all_vars) {
         std::cout << key << "=" << value << std::endl;
     }
@@ -86,7 +91,7 @@ int main() {
 
 #### Get the PATH as a Vector
 
-Use `env::path` to get the `PATH` environment variable as a `std::vector<std::string>` split by the platform-specific delimiter (`:` on Unix, `;` on Windows).
+Use `env::path` to get the `PATH` environment variable as a `std::vector<std::string>` split by the platform-specific delimiter (`:` on Unix, `;` on Windows). On Windows, use `env::pathw` to get it as `std::vector<std::wstring>`.
 
 ```cpp
 #include "environment/environment.hpp"
@@ -120,7 +125,7 @@ int main() {
 
 #### Scoped Environment Variable Changes (RAII)
 
-Use `env::scoped_env` or `env::with_env` to temporarily change an environment variable and restore it automatically when the scope ends.
+Use `env::with` to temporarily change an environment variable and restore it automatically when the callable finishes. You can also change multiple variables at once by passing a `std::map`.
 
 ```cpp
 #include "environment/environment.hpp"
@@ -129,18 +134,26 @@ Use `env::scoped_env` or `env::with_env` to temporarily change an environment va
 int main() {
     env::set("MY_VAR", "original");
 
-    {
-        env::scoped_env guard("MY_VAR", "temporary");
-        // MY_VAR is now "temporary" inside this scope
+    // Temporarily change a single variable
+    env::with("MY_VAR", std::optional<std::string>{"temporary"}, []() {
+        // MY_VAR is "temporary" here
         std::cout << "Inside: " << env::get("MY_VAR").value_or("") << std::endl;
-    }
+    });
     // MY_VAR is restored to "original"
     std::cout << "Outside: " << env::get("MY_VAR").value_or("") << std::endl;
 
-    // Alternatively, use with_env with a callable:
-    env::with_env("MY_VAR", "another_temp", []() {
-        // MY_VAR is "another_temp" here
-        std::cout << "Inside with_env: " << env::get("MY_VAR").value_or("") << std::endl;
+    // Unset a variable temporarily by passing std::nullopt
+    env::with("MY_VAR", std::nullopt, []() {
+        // MY_VAR is unset here
+        std::cout << "Inside (unset): " << env::get("MY_VAR").value_or("(not set)") << std::endl;
+    });
+
+    // Change multiple variables at once
+    env::with(std::map<std::string, std::optional<std::string>>{
+        {"VAR_A", "value_a"},
+        {"VAR_B", std::nullopt}  // unset VAR_B
+    }, []() {
+        // VAR_A = "value_a", VAR_B is unset
     });
 
     return 0;
@@ -166,14 +179,10 @@ int main() {
     }
 
     // Get all wide-character environment variables
-    auto all_wvars = env::all<std::wstring>();
+    auto all_wvars = env::allw();
     for (const auto& [key, value] : all_wvars) {
         std::wcout << key << L"=" << value << std::endl;
     }
-
-    // Get all UTF-8 and UTF-16 environment variables
-    auto utf8_vars = env::allutf8();
-    auto utf16_vars = env::allutf16();
 
     // Get PATH as a wide-character vector
     auto wide_paths = env::pathw();
@@ -192,17 +201,16 @@ int main() {
 
 ## API Reference
 
-### `std::optional<std::string> get(const std::string& name)`
+### `template<typename T> std::optional<to_string_t<T>> get(T&& name)`
 
 - Gets the environment variable with the specified name.
 - **Parameters**:
-  - `name`: The name of the environment variable.
+  - `name`: The name of the environment variable. Accepts `std::string`, `std::string_view`, `const char*`, and on Windows also `std::wstring`, `std::wstring_view`, `const wchar_t*`.
 - **Return Value**:
-  - An `std::optional<std::string>` containing the value if found.
+  - An `std::optional` containing the value if found.
   - `std::nullopt` if not found.
-- **Windows `wchar_t` Overload**: `std::optional<std::wstring> get(const std::wstring& name)`
 
-### `bool set(const std::string& name, const std::string& value, bool overwrite = true)`
+### `template<typename K, typename V> bool set(K&& name, V&& value, bool overwrite = true)`
 
 - Sets an environment variable.
 - **Parameters**:
@@ -211,37 +219,28 @@ int main() {
   - `overwrite`: If `true` (default), it overwrites an existing value. If `false` and the variable already exists, no action is taken.
 - **Return Value**:
   - `true` if the operation was successful.
-  - `false` if the operation failed.
-- **Windows `wchar_t` Overload**: `bool set(const std::wstring& name, const std::wstring& value, bool overwrite = true)`
+  - `false` if the operation failed (e.g., empty name).
 
-### `bool unset(const std::string& name)`
+### `template<typename T> bool unset(T&& name)`
 
 - Removes an environment variable.
 - **Parameters**:
-  - `name`: The name of the environment variable to remove.
+  - `name`: The name of the environment variable to remove. Passing `nullptr` returns `false` safely.
 - **Return Value**:
   - `true` if the operation was successful.
   - `false` if the operation failed.
-- **Windows `wchar_t` Overload**: `bool unset(const std::wstring& name)`
 
 ### `std::map<std::string, std::string> all()`
 
 - Gets a copy of all environment variables in the current environment.
 - **Return Value**:
-  - A `std::map` where the keys are environment variable names and the values are their corresponding values.
-- **Windows `wchar_t` Overload**: `std::map<std::wstring, std::wstring> all<std::wstring>()`
+  - A `std::map<std::string, std::string>` where the keys are environment variable names and the values are their corresponding values.
 
-**Note**: On the Windows platform, environment variable keys are case-insensitive. However, the `all` function returns a `std::map`, which is a case-sensitive container. This means if your environment contains variable names that differ only in case (e.g., `Path` and `PATH`), only one of them will be present in the returned map. Therefore, when using the result of `all` on Windows, it is recommended that users handle case-insensitivity themselves when looking up keys (e.g., by converting keys to a consistent case before comparison).
+### `std::map<std::wstring, std::wstring> allw()` (Windows only)
 
-### `std::map<std::string, std::string> allutf8()` (Windows only)
+- Gets all environment variables as a `std::map<std::wstring, std::wstring>`.
 
-- Gets all environment variables as a UTF-8 `std::map<std::string, std::string>`.
-- Equivalent to `all<std::string>()`.
-
-### `std::map<std::wstring, std::wstring> allutf16()` (Windows only)
-
-- Gets all environment variables as a UTF-16 `std::map<std::wstring, std::wstring>`.
-- Equivalent to `all<std::wstring>()`.
+**Note**: On the Windows platform, environment variable keys are case-insensitive. However, the `all`/`allw` functions return a `std::map`, which is a case-sensitive container. This means if your environment contains variable names that differ only in case (e.g., `Path` and `PATH`), only one of them will be present in the returned map. Therefore, when using the result on Windows, it is recommended that users handle case-insensitivity themselves when looking up keys (e.g., by converting keys to a consistent case before comparison).
 
 ### `std::vector<std::string> path()`
 
@@ -253,28 +252,25 @@ int main() {
 - Gets the `PATH` environment variable split into a vector of wide strings.
 - Uses `;` as the delimiter.
 
-### `std::string expand(const std::string& str)` (Windows only)
+### `template<typename T> to_string_t<T> expand(T&& str)` (Windows only)
 
 - Expands environment variable references (e.g., `%VARNAME%`) within the given string.
 - **Parameters**:
   - `str`: The string containing environment variable references to expand.
 - **Return Value**:
   - The expanded string. Returns the original string on failure.
-- **Windows `wchar_t` Overload**: `std::wstring expand(const std::wstring& str)`
 
-### `class scoped_env<CharT>` (RAII helper)
+### `template<typename T, typename F> void with(T&& var, std::optional<to_string_t<T>> const& value, F&& f)`
 
-- Temporarily sets (or unsets) an environment variable and automatically restores it when the object goes out of scope.
-- **Constructor**: `scoped_env(const string_type& var, const std::optional<string_type>& value)`
-  - `var`: The name of the environment variable.
-  - `value`: The value to set. If `std::nullopt`, the variable is unset instead.
-- When destroyed, restores the original value (or removes the variable if it didn't exist before).
-
-### `void with_env(const std::string& var, std::optional<std::string> value, F&& f)`
-
-- Temporarily sets an environment variable for the duration of a callable.
+- Temporarily sets (or unsets) an environment variable for the duration of a callable. Automatically restores the original value when the callable returns (even if an exception is thrown).
 - **Parameters**:
   - `var`: The name of the environment variable.
-  - `value`: The value to set. If `std::nullopt`, the variable is unset.
+  - `value`: The value to set. If `std::nullopt`, the variable is unset instead.
   - `f`: A callable to execute with the temporary environment variable in effect.
-- **Windows `wchar_t` Overload**: `void with_env(const std::wstring& var, std::optional<std::wstring> value, F&& f)`
+
+### `template<typename CharT, typename F> void with(std::map<std::basic_string<CharT>, std::optional<std::basic_string<CharT>>> const& envs, F&& f)`
+
+- Temporarily sets/unset multiple environment variables for the duration of a callable. Automatically restores all original values when the callable returns.
+- **Parameters**:
+  - `envs`: A map of variable names to optional values. `std::nullopt` means the variable will be unset.
+  - `f`: A callable to execute with the temporary environment variables in effect.
