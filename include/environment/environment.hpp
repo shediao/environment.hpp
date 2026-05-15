@@ -439,19 +439,17 @@ class scoped_env {
 
 template <typename T, typename F>
   requires std::is_invocable_v<F> && detail::string_like_type<T>
-inline void with_env(T&& var,
-                     std::optional<detail::to_string_t<T>> const& value,
-                     F&& f) {
+inline void with(T&& var, std::optional<detail::to_string_t<T>> const& value,
+                 F&& f) {
   detail::scoped_env env(detail::to_string_t<T>(std::forward<T>(var)), value);
   std::forward<F>(f)();
 }
 
 template <typename CharT, typename F>
   requires std::is_invocable_v<F>
-inline void with_env(
-    std::map<std::basic_string<CharT>,
-             std::optional<std::basic_string<CharT>>> const& envs,
-    F&& f) {
+inline void with(std::map<std::basic_string<CharT>,
+                          std::optional<std::basic_string<CharT>>> const& envs,
+                 F&& f) {
   detail::scoped_env env(envs);
   std::forward<F>(f)();
 }

@@ -119,11 +119,11 @@ TEST(TestEnv, EnvironmentsWithUnicode) {
 #endif
 
 TEST(TestEnv, WithEnv) {
-  using env::with_env;
+  using env::with;
   constexpr char key[] = "TEST_WITH_ENV_RAII_你好_Привіт_こんにちは_😊";
   constexpr char value[] = "123";
   ASSERT_FALSE(env::get(key));
-  env::with_env(key, value, [&]() {
+  env::with(key, value, [&]() {
     ASSERT_TRUE(env::get(key));
     ASSERT_EQ(env::get(key).value(), value);
   });
@@ -131,7 +131,7 @@ TEST(TestEnv, WithEnv) {
 #if defined(_WIN32)
   constexpr wchar_t wkey[] = L"TEST_WITH_ENV_RAII_你好_Привіт_こんにちは_😊";
   constexpr wchar_t wvalue[] = L"123";
-  env::with_env(wkey, wvalue, [&]() {
+  env::with(wkey, wvalue, [&]() {
     ASSERT_TRUE(env::get(wkey));
     ASSERT_EQ(env::get(wkey).value(), wvalue);
   });

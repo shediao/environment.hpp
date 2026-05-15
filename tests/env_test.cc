@@ -93,7 +93,7 @@ TEST(EnvironmentTest, WithEnv) {
   constexpr char key[] = "TEST_WITH_ENV_RAII";
   constexpr char value[] = "123";
   ASSERT_FALSE(env::get(key));
-  env::with_env(key, value, [&]() {
+  env::with(key, value, [&]() {
     ASSERT_TRUE(env::get(key));
     ASSERT_EQ(env::get(key).value(), value);
   });
@@ -101,14 +101,14 @@ TEST(EnvironmentTest, WithEnv) {
 
   env::set(key, value);
   ASSERT_TRUE(env::get(key));
-  env::with_env(key, std::nullopt, [&]() { ASSERT_FALSE(env::get(key)); });
+  env::with(key, std::nullopt, [&]() { ASSERT_FALSE(env::get(key)); });
   ASSERT_TRUE(env::get(key));
   env::unset(key);
 
 #if defined(_WIN32)
   constexpr wchar_t wkey[] = L"TEST_WITH_ENV_RAII";
   constexpr wchar_t wvalue[] = L"123";
-  env::with_env(wkey, wvalue, [&]() {
+  env::with(wkey, wvalue, [&]() {
     ASSERT_TRUE(env::get(wkey));
     ASSERT_EQ(env::get(wkey).value(), wvalue);
   });
@@ -116,7 +116,7 @@ TEST(EnvironmentTest, WithEnv) {
 
   env::set(wkey, wvalue);
   ASSERT_TRUE(env::get(wkey));
-  env::with_env(wkey, std::nullopt, [&]() { ASSERT_FALSE(env::get(wkey)); });
+  env::with(wkey, std::nullopt, [&]() { ASSERT_FALSE(env::get(wkey)); });
   ASSERT_TRUE(env::get(wkey));
   env::unset(wkey);
 #endif
@@ -182,7 +182,7 @@ TEST(EnvironmentTest, PathWithCustomValue) {
   constexpr char sep = ':';
 #endif
 
-  env::with_env(key, custom_path, [&]() {
+  env::with(key, custom_path, [&]() {
     auto paths = env::path();
     // Reconstruct and verify
     std::string reconstructed;
@@ -205,7 +205,7 @@ TEST(EnvironmentTest, PathSingleElement) {
   constexpr char custom_path[] = "/only/this/dir";
 #endif
 
-  env::with_env(key, custom_path, [&]() {
+  env::with(key, custom_path, [&]() {
     auto paths = env::path();
     ASSERT_EQ(paths.size(), 1);
     ASSERT_EQ(paths[0], custom_path);
@@ -219,14 +219,14 @@ TEST(EnvironmentTest, PathWithConsecutiveSeparators) {
   // and also skips the trailing empty element if the string ends with the
   // delimiter.
 #if defined(_WIN32)
-  env::with_env(key, "C:\\a;;C:\\b;", []() {
+  env::with(key, "C:\\a;;C:\\b;", []() {
     auto paths = env::path();
     ASSERT_EQ(paths.size(), 2);
     ASSERT_EQ(paths[0], "C:\\a");
     ASSERT_EQ(paths[1], "C:\\b");
   });
 #else
-  env::with_env(key, "/usr/bin::/bin:", []() {
+  env::with(key, "/usr/bin::/bin:", []() {
     auto paths = env::path();
     ASSERT_EQ(paths.size(), 2);
     ASSERT_EQ(paths[0], "/usr/bin");
@@ -238,7 +238,7 @@ TEST(EnvironmentTest, PathWithConsecutiveSeparators) {
 TEST(EnvironmentTest, PathEmptyPath) {
   constexpr char key[] = "PATH";
 
-  env::with_env(key, "", []() {
+  env::with(key, "", []() {
     auto paths = env::path();
     ASSERT_TRUE(paths.empty());
   });
@@ -291,11 +291,11 @@ TEST(EnvironmentTest, SetAndGetCString) {
 }
 
 // =============================================================================
-// scoped_env / with_env multi-variable tests (new map-based overloads)
+// scoped_env / with multi-variable tests (new map-based overloads)
 // =============================================================================
 
 TEST(EnvironmentTest, WithEnvMultiSet) {
-  // Set multiple new environment variables via map-based with_env.
+  // Set multiple new environment variables via map-based with.
   // After the scope, all should be unset.
   auto [key1, value1] = MK_ENV();
   auto [key2, value2] = MK_ENV();
@@ -303,7 +303,7 @@ TEST(EnvironmentTest, WithEnvMultiSet) {
   ASSERT_FALSE(env::get(key1));
   ASSERT_FALSE(env::get(key2));
 
-  env::with_env(
+  env::with(
       std::map<std::string, std::optional<std::string>>{
           {key1, value1},
           {key2, value2},
@@ -320,7 +320,7 @@ TEST(EnvironmentTest, WithEnvMultiSet) {
 }
 
 TEST(EnvironmentTest, WithEnvMultiRestore) {
-  // Pre-set some vars, then modify them inside with_env.
+  // Pre-set some vars, then modify them inside with.
   // After the scope, original values must be restored.
   auto [key1, value1] = MK_ENV();
   auto [key2, value2] = MK_ENV();
@@ -333,7 +333,7 @@ TEST(EnvironmentTest, WithEnvMultiRestore) {
   ASSERT_EQ(env::get(key1).value(), value1);
   ASSERT_EQ(env::get(key2).value(), value2);
 
-  env::with_env(
+  env::with(
       std::map<std::string, std::optional<std::string>>{
           {key1, new_value1},
           {key2, new_value2},
@@ -362,7 +362,7 @@ TEST(EnvironmentTest, WithEnvMultiMixedSetAndUnset) {
   ASSERT_TRUE(env::get(key_set));
   ASSERT_TRUE(env::get(key_unset));
 
-  env::with_env(
+  env::with(
       std::map<std::string, std::optional<std::string>>{
           {key_set, std::string("CHANGED_VALUE")},
           {key_unset, std::nullopt},
@@ -389,7 +389,7 @@ TEST(EnvironmentTest, WithEnvMultiNewSetAndNewUnset) {
   ASSERT_FALSE(env::get(key_set));
   ASSERT_FALSE(env::get(key_unset));
 
-  env::with_env(
+  env::with(
       std::map<std::string, std::optional<std::string>>{
           {key_set, std::string("FRESH_VALUE")},
           {key_unset, std::nullopt},
@@ -407,8 +407,8 @@ TEST(EnvironmentTest, WithEnvMultiNewSetAndNewUnset) {
 TEST(EnvironmentTest, WithEnvMultiEmptyMap) {
   // An empty map should be a no-op and not crash.
   bool called = false;
-  env::with_env(std::map<std::string, std::optional<std::string>>{},
-                [&]() { called = true; });
+  env::with(std::map<std::string, std::optional<std::string>>{},
+            [&]() { called = true; });
   ASSERT_TRUE(called);
 }
 
@@ -417,7 +417,7 @@ TEST(EnvironmentTest, WithEnvMultiSingleVarViaMap) {
   auto [key, value] = MK_ENV();
   ASSERT_FALSE(env::get(key));
 
-  env::with_env(
+  env::with(
       std::map<std::string, std::optional<std::string>>{
           {key, value},
       },
@@ -436,7 +436,7 @@ TEST(EnvironmentTest, WithEnvMultiOverwriteExistingWithNullopt) {
   env::set(key, value);
   ASSERT_TRUE(env::get(key));
 
-  env::with_env(
+  env::with(
       std::map<std::string, std::optional<std::string>>{
           {key, std::nullopt},
       },
@@ -457,7 +457,7 @@ TEST(EnvironmentTest, WithEnvMultiPartialOverlap) {
   ASSERT_TRUE(env::get(existing_key));
   ASSERT_FALSE(env::get(new_key));
 
-  env::with_env(
+  env::with(
       std::map<std::string, std::optional<std::string>>{
           {existing_key, std::string("CHANGED")},
           {new_key, new_value},
@@ -485,7 +485,7 @@ TEST(EnvironmentTest, WithEnvMultiWideChars) {
   ASSERT_FALSE(env::get(key1));
   ASSERT_FALSE(env::get(key2));
 
-  env::with_env(
+  env::with(
       std::map<std::wstring, std::optional<std::wstring>>{
           {key1, value1},
           {key2, value2},
