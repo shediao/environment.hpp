@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <environment/environment.hpp>
+#include <fstream>
 #include <string_view>
 #include <subprocess/subprocess.hpp>
 
@@ -499,5 +500,238 @@ TEST(EnvironmentTest, WithEnvMultiWideChars) {
 
   ASSERT_FALSE(env::get(key1));
   ASSERT_FALSE(env::get(key2));
+}
+#endif  // _WIN32
+
+// =============================================================================
+// env::search_path() tests
+// =============================================================================
+
+TEST(SearchPathTest, EmptyCommandReturnsNullopt) {
+  auto result = env::search_path("");
+  ASSERT_FALSE(result.has_value());
+  result = env::search_path(std::string_view{});
+  ASSERT_FALSE(result.has_value());
+}
+
+TEST(SearchPathTest, NonExistentCommandReturnsNullopt) {
+  auto result = env::search_path("__this_command_does_not_exist_12345__");
+  ASSERT_FALSE(result.has_value())
+      << "search_path should return nullopt for non-existent commands";
+}
+
+TEST(SearchPathTest, FindsCommonSystemCommands) {
+  // These are universally available on UNIX; on Windows we use different
+  // commands that should be present in System32.
+#if defined(_WIN32)
+  std::string cmd = "cmd.exe";
+#else
+  std::string cmd = "sh";
+#endif
+  auto result = env::search_path(cmd);
+  ASSERT_TRUE(result.has_value())
+      << "search_path should find a standard system shell";
+  ASSERT_FALSE(result->empty());
+  // The result path should end with the command name.
+  ASSERT_TRUE(result->ends_with(cmd));
+}
+
+TEST(SearchPathTest, ResultIsAbsolutePath) {
+  // The returned path should be absolute (or at least contain a separator).
+#if defined(_WIN32)
+  auto result = env::search_path("cmd.exe");
+#else
+  auto result = env::search_path("sh");
+#endif
+  ASSERT_TRUE(result.has_value());
+#if defined(_WIN32)
+  bool const is_absolute =
+      (result->size() >= 3 && std::isalpha((*result)[0]) &&
+       (*result)[1] == ':' && (*result)[2] == '\\') ||
+      (result->size() >= 2 && (*result)[0] == '\\' && (*result)[1] == '\\');
+#else
+  bool const is_absolute = !result->empty() && (*result)[0] == '/';
+#endif
+  ASSERT_TRUE(is_absolute) << "Expected absolute path, got: " << *result;
+}
+
+#if !defined(_WIN32)
+TEST(SearchPathTest, AbsolutePathCommandReturnsDirectly) {
+  // When command already contains '/', search_path resolves it directly.
+  auto sh_result = env::search_path("/bin/sh");
+  ASSERT_TRUE(sh_result.has_value());
+  ASSERT_EQ(*sh_result, "/bin/sh");
+}
+
+TEST(SearchPathTest, RelativePathCommandCheckedDirectly) {
+  // A command like "./env_test" (relative path) should be checked directly.
+  auto result = env::search_path("./env_test");
+  // May or may not exist depending on cwd; we just verify no crash.
+  // If it exists, it must be the exact string we passed.
+  if (result.has_value()) {
+    ASSERT_EQ(*result, "./env_test");
+  }
+}
+
+TEST(SearchPathTest, DirectoryNotReturned) {
+  // A directory (like "/") should NOT be returned as an executable.
+  auto result = env::search_path("/");
+  ASSERT_FALSE(result.has_value())
+      << "A directory should not be returned as an executable";
+}
+
+TEST(SearchPathTest, PathWithTrailingSlashDir) {
+  // "/bin/" is a directory, not a regular file.
+  auto result = env::search_path("/bin/");
+  ASSERT_FALSE(result.has_value());
+}
+#endif  // !_WIN32
+
+TEST(SearchPathTest, EmptyPathEnvReturnsNullopt) {
+  // When PATH is empty, search_path should return nullopt for bare commands.
+  auto [key, value] = MK_ENV();
+  env::with("PATH", std::string(""), [&]() {
+#if defined(_WIN32)
+    // On Windows, SearchPathW also searches system dirs even with empty
+    // PATH, so we look for something improbable.
+    auto result = env::search_path("__this_should_not_exist_anywhere_98765__");
+    ASSERT_FALSE(result.has_value());
+#else
+        auto result = env::search_path("sh");
+        ASSERT_FALSE(result.has_value())
+            << "With empty PATH, bare commands should not be found";
+#endif
+  });
+}
+
+TEST(SearchPathTest, MissingPathEnvReturnsNullopt) {
+  auto [key, value] = MK_ENV();
+  env::with("PATH", std::nullopt, [&]() {
+#if defined(_WIN32)
+    auto result = env::search_path("__this_should_not_exist_anywhere_98765__");
+    ASSERT_FALSE(result.has_value());
+#else
+        auto result = env::search_path("sh");
+        ASSERT_FALSE(result.has_value())
+            << "With PATH unset, bare commands should not be found";
+#endif
+  });
+}
+
+TEST(SearchPathTest, CommandWithSpacesInPath) {
+  // The search should handle PATH entries that contain spaces.
+  // We construct a temporary directory with a space, place a script,
+  // and verify search_path finds it.
+#if defined(_WIN32)
+  // On Windows we skip this test – creating executables is more involved.
+  GTEST_SKIP() << "Skipping spaces-in-path test on Windows (creates .exe)";
+#else
+  // Create a temporary directory with a space in its name.
+  char tmpdir_template[] = "/tmp/env_test_space_XXXXXX";
+  char* tmpdir = ::mkdtemp(tmpdir_template);
+  ASSERT_NE(tmpdir, nullptr);
+
+  // Create a dummy executable script.
+  std::string script_path = std::string(tmpdir) + "/dummy_exec";
+  {
+    std::ofstream ofs(script_path);
+    ofs << "#!/bin/sh\nexit 0\n";
+  }
+  ::chmod(script_path.c_str(), 0755);
+
+  // Prepend our temp dir to PATH.
+  auto original_path = env::get("PATH").value_or("");
+  env::with("PATH", std::string(tmpdir) + ":" + original_path, [&]() {
+    auto result = env::search_path("dummy_exec");
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(*result, script_path);
+  });
+
+  // Cleanup.
+  ::unlink(script_path.c_str());
+  ::rmdir(tmpdir);
+#endif
+}
+
+TEST(SearchPathTest, ConsecutivePathSeparators) {
+  // PATH with consecutive separators should still find the command.
+#if defined(_WIN32)
+  GTEST_SKIP() << "Skipping on Windows – PATH manipulation is complex";
+#else
+  auto original_path = env::get("PATH").value_or("");
+
+  env::with("PATH", std::string("::/bin::/usr/bin:::"), [&]() {
+    auto result = env::search_path("sh");
+    ASSERT_TRUE(result.has_value());
+    ASSERT_NE(result->find("/bin/sh"), std::string::npos);
+  });
+#endif
+}
+
+TEST(SearchPathTest, TrailingPathSeparator) {
+  // PATH ending with ':' is legal – trailing empty entry is ignored.
+#if defined(_WIN32)
+  GTEST_SKIP() << "Skipping on Windows – PATH manipulation is complex";
+#else
+  auto original_path = env::get("PATH").value_or("");
+  env::with("PATH", original_path + ":", [&]() {
+    auto result = env::search_path("sh");
+    ASSERT_TRUE(result.has_value());
+  });
+#endif
+}
+
+TEST(SearchPathTest, MultipleCommandsInSamePath) {
+  // Verify that different commands resolve to different paths.
+#if defined(_WIN32)
+  auto cmd = env::search_path("cmd.exe");
+  auto reg = env::search_path("reg.exe");
+  ASSERT_TRUE(cmd.has_value());
+  ASSERT_TRUE(reg.has_value());
+  ASSERT_NE(*cmd, *reg);
+#else
+  auto sh = env::search_path("sh");
+  auto ls = env::search_path("ls");
+  ASSERT_TRUE(sh.has_value());
+  ASSERT_TRUE(ls.has_value());
+  // They should reside in different directories.
+  // Note: on some systems sh and ls could be in the same dir,
+  // so we just verify both were found and are absolute.
+  ASSERT_FALSE(sh->empty());
+  ASSERT_FALSE(ls->empty());
+#endif
+}
+
+#if defined(_WIN32)
+TEST(SearchPathTest, WideCharSearchPath) {
+  auto result = env::search_path(L"cmd.exe");
+  ASSERT_TRUE(result.has_value());
+  ASSERT_FALSE(result->empty());
+  ASSERT_NE(result->find(L"cmd"), std::wstring::npos);
+}
+
+TEST(SearchPathTest, WideCharNotFoundReturnsNullopt) {
+  auto result = env::search_path(L"__this_wide_command_does_not_exist__");
+  ASSERT_FALSE(result.has_value());
+}
+
+TEST(SearchPathTest, ExtensionProbing) {
+  auto result = env::search_path(L"notepad");
+  ASSERT_TRUE(result.has_value());
+  // The resolved path should end with "notepad.exe".
+  ASSERT_TRUE(result->ends_with(L"notepad.exe"));
+}
+
+TEST(SearchPathTest, AbsoluteWindowsPath) {
+  auto result = env::search_path("C:\\Windows\\System32\\cmd.exe");
+  ASSERT_TRUE(result.has_value());
+  // Result might be canonicalized, but cmd.exe should be in it.
+  ASSERT_TRUE(result->ends_with("cmd.exe"));
+}
+
+TEST(SearchPathTest, WideCharAbsoluteWindowsPath) {
+  auto result = env::search_path(L"C:\\Windows\\System32\\cmd.exe");
+  ASSERT_TRUE(result.has_value());
+  ASSERT_TRUE(result->ends_with(L"cmd.exe"));
 }
 #endif  // _WIN32

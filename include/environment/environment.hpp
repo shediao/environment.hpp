@@ -45,6 +45,9 @@
 #include <algorithm>
 #include <locale>
 #else
+#include <sys/stat.h>
+#include <unistd.h>
+
 extern "C" {
 extern char** environ;
 }
@@ -365,6 +368,114 @@ inline std::vector<std::string> path() {
   return detail::split(path, ';');
 #else
   return detail::split(path, ':');
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// search_path(command)
+//   Returns the absolute or resolved path of an executable by searching PATH.
+//   - On UNIX: splits PATH by ':', checks each candidate with ::access(X_OK).
+//   - On Windows: uses SearchPathW which follows the standard Windows
+//     search order (application dir → current dir → system dirs → PATH),
+//     and automatically appends PATHEXT extensions.
+//
+//   Returns std::nullopt if the command is empty or cannot be found.
+// ---------------------------------------------------------------------------
+#if defined(_WIN32)
+// Wide-character variant for Windows – mirrors search_path() with wstring.
+inline std::optional<std::wstring> search_path(std::wstring_view command) {
+  if (command.empty()) {
+    return std::nullopt;
+  }
+
+  std::wstring const wcmd = std::wstring(command);
+  auto search_with_ext =
+      [&](std::wstring const& ext) -> std::optional<std::wstring> {
+    DWORD const size =
+        SearchPathW(nullptr, wcmd.c_str(), ext.empty() ? nullptr : ext.data(),
+                    0, nullptr, nullptr);
+    if (size == 0) {
+      return std::nullopt;
+    }
+    std::wstring result(size, L'\0');
+    DWORD const copied =
+        SearchPathW(nullptr, wcmd.c_str(), ext.empty() ? nullptr : ext.data(),
+                    size, result.data(), nullptr);
+    // copied includes the null terminator
+    result.resize(copied);
+    return result;
+  };
+
+  auto pathext =
+      ::env::get(L"PATHEXT")
+          .value_or(L".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC");
+
+  if (auto dot = wcmd.find_last_of(L'.');
+      dot != std::wstring_view::npos && dot > 0) {
+    return search_with_ext(L"");
+  }
+  for (auto& ext : detail::split(pathext, L';')) {
+    if (ext.empty() || ext[0] != L'.') {
+      continue;
+    }
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::towupper);
+    if (auto result = search_with_ext(ext); result.has_value()) {
+      return result;
+    }
+  }
+  return std::nullopt;
+}
+#endif  // _WIN32
+
+inline std::optional<std::string> search_path(std::string_view command) {
+  if (command.empty()) {
+    return std::nullopt;
+  }
+
+#if defined(_WIN32)
+  auto result = search_path(detail::to_wstring(command));
+  if (result.has_value()) {
+    return detail::to_string(std::move(*result));
+  }
+  return std::nullopt;
+#else
+  // If the command already contains a path separator, resolve it directly
+  // without consulting PATH (POSIX semantics).
+  if (command.find('/') != std::string_view::npos) {
+    // Must be a regular file (not a directory) with execute permission.
+    struct stat st;
+    if (::stat(command.data(), &st) == 0 && S_ISREG(st.st_mode) &&
+        ::access(command.data(), X_OK) == 0) {
+      return std::string(command);
+    }
+    return std::nullopt;
+  }
+
+  // Search each directory in PATH.
+  auto path_env = ::env::get("PATH");
+  if (!path_env.has_value() || path_env->empty()) {
+    return std::nullopt;
+  }
+
+  auto const dirs = detail::split(*path_env, ':');
+  for (auto const& dir : dirs) {
+    if (dir.empty()) {
+      continue;  // skip empty entries from e.g. consecutive/trailing ':'
+    }
+    std::string candidate;
+    candidate.reserve(dir.size() + 1 + command.size());
+    candidate.append(dir);
+    candidate.push_back('/');
+    candidate.append(command);
+
+    struct stat st;
+    if (::stat(candidate.c_str(), &st) == 0 && S_ISREG(st.st_mode) &&
+        ::access(candidate.c_str(), X_OK) == 0) {
+      return candidate;
+    }
+  }
+
+  return std::nullopt;
 #endif
 }
 
