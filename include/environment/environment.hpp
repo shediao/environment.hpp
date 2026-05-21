@@ -133,6 +133,7 @@ std::vector<std::basic_string<CharT>> split(std::basic_string<CharT> const& str,
 
   return ret;
 }
+
 #if defined(_WIN32)
 // Helper function to convert a UTF-8 std::string to a UTF-16 std::wstring
 inline std::wstring to_wstring(const std::string_view utf8str,
@@ -295,6 +296,89 @@ inline void all(
 
   FreeEnvironmentStringsW(envBlock);
 }
+inline std::optional<std::wstring> system_search_path(
+    std::wstring_view command) {
+  if (command.empty()) {
+    return std::nullopt;
+  }
+
+  std::wstring const wcmd = std::wstring(command);
+  auto search_with_ext =
+      [&](const wchar_t* ext) -> std::optional<std::wstring> {
+    DWORD const size =
+        SearchPathW(nullptr, wcmd.c_str(), ext, 0, nullptr, nullptr);
+    if (size == 0) {
+      return std::nullopt;
+    }
+    std::wstring result(size, L'\0');
+    DWORD const copied =
+        SearchPathW(nullptr, wcmd.c_str(), ext, size, result.data(), nullptr);
+    // copied includes the null terminator
+    result.resize(copied);
+    return result;
+  };
+
+  auto pathext = detail::get(std::wstring_view(L"PATHEXT"))
+                     .value_or(L".COM;.EXE;.BAT;.CMD");
+
+  if (auto dot = wcmd.find_last_of(L'.');
+      dot != std::wstring_view::npos && dot > 0) {
+    return search_with_ext(nullptr);
+  }
+  for (auto& ext : detail::split(pathext, L';')) {
+    if (ext.empty() || ext[0] != L'.') {
+      continue;
+    }
+    if (auto result = search_with_ext(ext.data()); result.has_value()) {
+      return result;
+    }
+  }
+  return std::nullopt;
+}
+inline std::optional<std::wstring> env_search_path(std::wstring_view command) {
+  if (command.empty()) {
+    return std::nullopt;
+  }
+  auto path_env = detail::get(std::wstring_view(L"PATH"));
+  if (!path_env.has_value()) {
+    return std::nullopt;
+  }
+
+  std::wstring const wcmd = std::wstring(command);
+  auto pathexts = split(detail::get(std::wstring_view(L"PATHEXT"))
+                            .value_or(L".COM;.EXE;.BAT;.CMD"),
+                        L';');
+
+  bool command_has_ext = false;
+  if (auto dot = wcmd.find_last_of(L'.');
+      dot != std::wstring_view::npos && dot > 0) {
+    command_has_ext = true;
+  }
+  for (auto& path : detail::split(path_env.value(), L';')) {
+    if (command_has_ext) {
+      std::wstring file = path + L"\\" + wcmd;
+      auto attr = GetFileAttributesW(file.c_str());
+      if (attr == INVALID_FILE_ATTRIBUTES || attr & FILE_ATTRIBUTE_DIRECTORY) {
+        continue;
+      }
+      return file;
+    }
+    for (auto& ext : pathexts) {
+      if (ext.empty() || ext[0] != L'.') {
+        continue;
+      }
+      std::wstring file = path + L"\\" + wcmd + ext;
+      auto attr = GetFileAttributesW(file.c_str());
+      if (attr == INVALID_FILE_ATTRIBUTES ||
+          (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+        continue;
+      }
+      return file;
+    }
+  }
+  return std::nullopt;
+}
+
 #else   // !_WIN32
 inline std::optional<std::string> get(std::string_view name) {
   auto* env = ::getenv(name.data());
@@ -365,10 +449,18 @@ inline bool unset(T&& name) {
 inline std::vector<std::string> path() {
   auto path = ::env::get("PATH").value_or("");
 #if defined(_WIN32)
-  return detail::split(path, ';');
+  char sep = ';';
 #else
-  return detail::split(path, ':');
+  char sep = ':';
 #endif
+  std::vector<std::string> ret;
+  for (auto&& p : detail::split(path, sep)) {
+    if (p.empty()) {
+      continue;
+    }
+    ret.emplace_back(p);
+  }
+  return ret;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,43 +479,11 @@ inline std::optional<std::wstring> search_path(std::wstring_view command) {
   if (command.empty()) {
     return std::nullopt;
   }
-
-  std::wstring const wcmd = std::wstring(command);
-  auto search_with_ext =
-      [&](std::wstring const& ext) -> std::optional<std::wstring> {
-    DWORD const size =
-        SearchPathW(nullptr, wcmd.c_str(), ext.empty() ? nullptr : ext.data(),
-                    0, nullptr, nullptr);
-    if (size == 0) {
-      return std::nullopt;
-    }
-    std::wstring result(size, L'\0');
-    DWORD const copied =
-        SearchPathW(nullptr, wcmd.c_str(), ext.empty() ? nullptr : ext.data(),
-                    size, result.data(), nullptr);
-    // copied includes the null terminator
-    result.resize(copied);
-    return result;
-  };
-
-  auto pathext =
-      ::env::get(L"PATHEXT")
-          .value_or(L".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC");
-
-  if (auto dot = wcmd.find_last_of(L'.');
-      dot != std::wstring_view::npos && dot > 0) {
-    return search_with_ext(L"");
+  auto ret = detail::env_search_path(command);
+  if (ret.has_value()) {
+    return ret;
   }
-  for (auto& ext : detail::split(pathext, L';')) {
-    if (ext.empty() || ext[0] != L'.') {
-      continue;
-    }
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::towupper);
-    if (auto result = search_with_ext(ext); result.has_value()) {
-      return result;
-    }
-  }
-  return std::nullopt;
+  return detail::system_search_path(command);
 }
 #endif  // _WIN32
 
@@ -502,8 +562,15 @@ inline detail::to_string_t<T> expand(T&& name) {
 }
 
 inline std::vector<std::wstring> pathw() {
+  std::vector<std::wstring> ret;
   auto path = ::env::get(L"PATH").value_or(L"");
-  return detail::split(path, L';');
+  for (auto&& p : detail::split(path, L';')) {
+    if (p.empty()) {
+      continue;
+    }
+    ret.emplace_back(std::move(p));
+  }
+  return ret;
 }
 #endif  // _WIN32
 
