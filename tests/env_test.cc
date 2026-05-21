@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <environment/environment.hpp>
 #include <fstream>
 #include <string_view>
@@ -718,8 +719,10 @@ TEST(SearchPathTest, WideCharNotFoundReturnsNullopt) {
 TEST(SearchPathTest, ExtensionProbing) {
   auto result = env::search_path(L"notepad");
   ASSERT_TRUE(result.has_value());
-  // The resolved path should end with "notepad.exe".
-  ASSERT_TRUE(result->ends_with(L"notepad.exe"));
+  // The resolved path should end with "notepad.exe" (case-insensitive).
+  std::wstring lower = *result;
+  std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
+  ASSERT_TRUE(lower.ends_with(L"notepad.exe"));
 }
 
 TEST(SearchPathTest, AbsoluteWindowsPath) {
